@@ -66,6 +66,15 @@ jobs:
             NEXT_PUBLIC_DEPLOYMENT=akash
             NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
 
+      - name: Build and push clickhouse
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./akash/clickhouse.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-clickhouse:${{ env.TAG }}
+
       - name: Build and push caddy
         uses: docker/build-push-action@v6
         with:

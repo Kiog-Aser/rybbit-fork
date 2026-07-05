@@ -14,7 +14,7 @@ version: "2.0"
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:25.4.2
+    image: ghcr.io/kiog-aser/rybbit-clickhouse:akash
     env:
       - CLICKHOUSE_DB=analytics
       - CLICKHOUSE_USER=default
@@ -34,6 +34,12 @@ services:
 
   postgres:
     image: postgres:17.4-alpine
+    args:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=40
     env:
       - POSTGRES_USER=frog
       - POSTGRES_PASSWORD=changeme
@@ -65,11 +71,15 @@ services:
 
   backend:
     image: ghcr.io/kiog-aser/rybbit-backend:akash
+    depends-on:
+      - clickhouse
+      - postgres
+      - redis
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
       - LITE_DASHBOARD=true
-      - CLUSTER_WORKERS=1
+      - CLUSTER_WORKERS=0
       - DEPLOYMENT=akash
       - REVENUE_ATTRIBUTION=true
       - CLICKHOUSE_HOST=http://clickhouse:8123
@@ -111,6 +121,8 @@ services:
     expose:
       - port: 80
         as: 80
+        accept:
+          - analytics.milh.tech
         to:
           - global: true
 
@@ -155,7 +167,7 @@ profiles:
         cpu:
           units: 0.35
         memory:
-          size: 384Mi
+          size: 512Mi
         storage:
           size: 512Mi
     client:

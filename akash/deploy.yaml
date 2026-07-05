@@ -71,6 +71,9 @@ services:
 
   backend:
     image: ghcr.io/kiog-aser/rybbit-backend:akash
+    command:
+      - node
+      - dist/index.js
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true

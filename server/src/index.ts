@@ -489,6 +489,18 @@ server.register(apiRoutes, { prefix: "/api" });
 
 async function runBackgroundInitialization() {
   try {
+    if (AKASH_LEAN_MODE) {
+      const { execFile } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execFileAsync = promisify(execFile);
+      try {
+        await execFileAsync("npm", ["run", "db:migrate"], { cwd: process.cwd() });
+        server.log.info("Database migrations complete");
+      } catch (migrateError) {
+        server.log.warn(migrateError, "Database migrations failed (tables may already exist)");
+      }
+    }
+
     await Promise.all([initializeClickhouse(), initPostgres()]);
     try {
       const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");

@@ -85,6 +85,8 @@ jobs:
           tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-caddy:${{ env.TAG }}
 
       - name: Make GHCR packages public (required for Akash pull)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           for pkg in rybbit-backend rybbit-client rybbit-caddy rybbit-clickhouse; do
             gh api --method PATCH "/user/packages/container/${pkg}/visibility" -f visibility=public \

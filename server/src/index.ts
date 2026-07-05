@@ -520,6 +520,18 @@ async function ensureAkashAuthReady(): Promise<void> {
 
 async function runBackgroundInitialization() {
   try {
+    if (AKASH_LEAN_MODE) {
+      try {
+        await ensureAkashAuthReady();
+        server.log.info("Akash auth bootstrap complete");
+      } catch (leanInitError) {
+        server.log.error(
+          leanInitError,
+          "Akash auth bootstrap failed — login will not work until Postgres is reachable"
+        );
+      }
+    }
+
     await Promise.all([initializeClickhouse(), initPostgres()]);
     if (!AKASH_LEAN_MODE) {
       try {
@@ -547,19 +559,7 @@ async function runBackgroundInitialization() {
 
 const start = async () => {
   try {
-    if (!cluster.isWorker && AKASH_LEAN_MODE) {
-      server.log.info("Akash lean mode: running Postgres migrations and bootstrap before accepting traffic");
-      try {
-        await ensureAkashAuthReady();
-        server.log.info("Akash auth bootstrap complete");
-      } catch (leanInitError) {
-        server.log.error(
-          leanInitError,
-          "Akash auth bootstrap failed — login will not work until Postgres is reachable"
-        );
-      }
-    }
-
+    // Bind HTTP immediately so Caddy never gets connection refused (502) while DB init runs.
     await server.listen({ port: 3001, host: "0.0.0.0" });
     server.log.info(`Server is listening on http://0.0.0.0:3001 (PID: ${process.pid})`);
 

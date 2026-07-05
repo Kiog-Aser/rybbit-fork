@@ -81,7 +81,7 @@ services:
 
   backend:
     # Use an immutable tag (akash-<git-sha>) — mutable akash-v2 may not re-pull on Akash redeploy
-    image: ghcr.io/kiog-aser/rybbit-backend:akash-01b9335
+    image: ghcr.io/kiog-aser/rybbit-backend:akash-f4ffbd1
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true

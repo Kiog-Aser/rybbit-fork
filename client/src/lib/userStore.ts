@@ -14,9 +14,16 @@ export const userStore = create<{
   setIsPending: isPending => set({ isPending }),
 }));
 
-authClient.getSession().then(({ data: session }) => {
+const SESSION_TIMEOUT_MS = 8_000;
+
+Promise.race([
+  authClient.getSession(),
+  new Promise<{ data: { user: User | null } | null }>(resolve =>
+    setTimeout(() => resolve({ data: null }), SESSION_TIMEOUT_MS)
+  ),
+]).then(({ data: session }) => {
   userStore.setState({
-    user: session?.user,
+    user: session?.user ?? null,
     isPending: false,
   });
 });

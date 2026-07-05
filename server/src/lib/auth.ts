@@ -11,6 +11,7 @@ import { db } from "../db/postgres/postgres.js";
 import * as schema from "../db/postgres/schema.js";
 import { invitation, member, memberSiteAccess, sites, user } from "../db/postgres/schema.js";
 import { invalidateSitesAccessCache } from "./auth-utils.js";
+import { getBootstrapAdminEmail, isBootstrapAdminMode } from "./bootstrapAdmin.js";
 import { API_RATE_LIMIT_WINDOW, DISABLE_SIGNUP, IS_CLOUD, STANDARD_API_RATE_LIMIT } from "./const.js";
 import {
   addContactToAudience,
@@ -319,6 +320,29 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      const bootstrapEmail = getBootstrapAdminEmail();
+      if (bootstrapEmail && (ctx.path === "/sign-in/email" || ctx.path.startsWith("/sign-in/"))) {
+        const body = ctx.body as { email?: string } | undefined;
+        const email = body?.email?.trim().toLowerCase();
+        if (email && email !== bootstrapEmail) {
+          throw new APIError("FORBIDDEN", {
+            message: "Only the configured admin account can sign in.",
+          });
+        }
+      }
+
+      if (isBootstrapAdminMode() && (ctx.path === "/sign-up/email" || ctx.path.startsWith("/sign-up/"))) {
+        throw new APIError("FORBIDDEN", {
+          message: "Sign-up is disabled.",
+        });
+      }
+
+      if (isBootstrapAdminMode() && ctx.path === "/organization/invite-member") {
+        throw new APIError("FORBIDDEN", {
+          message: "Invitations are disabled in single-user mode.",
+        });
+      }
+
       if (IS_CLOUD && ctx.path === "/organization/invite-member") {
         const body = ctx.body as { organizationId?: string } | undefined;
         const organizationId = body?.organizationId;

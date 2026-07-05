@@ -95,6 +95,9 @@ services:
       - REDIS_PASSWORD=changeme
       - BETTER_AUTH_SECRET=replace-me-with-long-random-string
       - BASE_URL=https://analytics.milh.tech
+      - BOOTSTRAP_ADMIN_EMAIL=you@example.com
+      - BOOTSTRAP_ADMIN_PASSWORD=change-me-to-a-long-password
+      - BOOTSTRAP_ADMIN_NAME=Admin
       - DISABLE_SIGNUP=true
       - DISABLE_TELEMETRY=true
     expose:

@@ -490,6 +490,8 @@ const start = async () => {
     // When running as a cluster worker, the primary process already initialized the databases
     if (!cluster.isWorker) {
       await Promise.all([initializeClickhouse(), initPostgres()]);
+      const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
+      await ensureBootstrapAdmin();
     }
 
     // Cron jobs should only run on the primary process (or in single-process mode)

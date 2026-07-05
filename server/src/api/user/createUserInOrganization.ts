@@ -5,6 +5,7 @@ import { db } from "../../db/postgres/postgres.js";
 import { member } from "../../db/postgres/schema.js";
 import { auth } from "../../lib/auth.js";
 import { getIsUserAdmin } from "../../lib/auth-utils.js";
+import { isBootstrapAdminMode } from "../../lib/bootstrapAdmin.js";
 
 function generateId(len = 32) {
   const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -42,6 +43,10 @@ export async function createUserInOrganization(
   reply: FastifyReply
 ) {
   try {
+    if (isBootstrapAdminMode()) {
+      return reply.status(403).send({ error: "User creation is disabled in single-user mode." });
+    }
+
     const { organizationId } = request.params;
     const { email: rawEmail, name, password, role } = request.body;
     const userId = request.user?.id;

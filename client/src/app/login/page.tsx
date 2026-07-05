@@ -8,7 +8,7 @@ import { Turnstile } from "@/components/auth/Turnstile";
 import { useExtracted } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RybbitTextLogo } from "../../components/RybbitLogo";
 import { SpinningGlobe } from "../../components/SpinningGlobe";
 import { useSetPageTitle } from "../../hooks/useSetPageTitle";
@@ -22,6 +22,12 @@ export default function Page() {
   useSetPageTitle("Login");
   const t = useExtracted();
   const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (configs?.bootstrapAdminEmail) {
+      setEmail(configs.bootstrapAdminEmail);
+    }
+  }, [configs?.bootstrapAdminEmail]);
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
@@ -137,7 +143,7 @@ export default function Page() {
               </div>
             </form>
 
-            {(!configs?.disableSignup || !isLoadingConfigs) && (
+            {!configs?.singleUserMode && (!configs?.disableSignup || !isLoadingConfigs) && (
               <div className="text-center text-sm">
                 {t("Don't have an account?")}{" "}
                 <Link

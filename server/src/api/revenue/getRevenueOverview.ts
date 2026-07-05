@@ -1,5 +1,9 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { getRevenueOverview, getRevenueTotals } from "../../services/revenue/stripeRevenueService.js";
+import {
+  ensureStripeRevenueSynced,
+  getRevenueOverview,
+  getRevenueTotals,
+} from "../../services/revenue/stripeRevenueService.js";
 
 export async function getRevenueOverviewHandler(
   request: FastifyRequest<{
@@ -15,6 +19,8 @@ export async function getRevenueOverviewHandler(
   if (!startTime || !endTime) {
     return reply.status(400).send({ error: "startTime and endTime are required" });
   }
+
+  await ensureStripeRevenueSynced(siteId);
 
   const [totals, byChannel] = await Promise.all([
     getRevenueTotals(siteId, startTime, endTime),

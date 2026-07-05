@@ -1,7 +1,7 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import { TimeBucketToFn } from "../analytics/utils/utils.js";
 import { TimeBucket } from "../analytics/types.js";
-import { getRevenueTimeSeries } from "../../services/revenue/stripeRevenueService.js";
+import { ensureStripeRevenueSynced, getRevenueTimeSeries } from "../../services/revenue/stripeRevenueService.js";
 
 export async function getRevenueTimeSeriesHandler(
   request: FastifyRequest<{
@@ -21,6 +21,8 @@ export async function getRevenueTimeSeriesHandler(
   if (!bucketFn) {
     return reply.status(400).send({ error: `Invalid bucket value: ${bucket}` });
   }
+
+  await ensureStripeRevenueSynced(siteId);
 
   const data = await getRevenueTimeSeries(siteId, startTime, endTime, bucketFn, timeZone);
   return reply.send({ data });

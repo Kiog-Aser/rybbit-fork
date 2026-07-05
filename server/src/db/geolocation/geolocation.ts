@@ -2,7 +2,6 @@ import type { City } from "@maxmind/geoip2-node";
 import { Reader } from "@maxmind/geoip2-node";
 import { readFile } from "fs/promises";
 import path from "path";
-import { AKASH_LEAN_MODE } from "../../lib/const.js";
 import { logger } from "../../lib/logger/logger.js";
 import { LocationResponse } from "./types.js";
 
@@ -32,11 +31,6 @@ function startLoad(): Promise<void> {
   })();
 
   return loadPromise;
-}
-
-// Lean Akash deployments skip the 63MB City DB to avoid OOM during startup.
-if (!AKASH_LEAN_MODE) {
-  void startLoad();
 }
 
 function extractLocationData(response: City | null): LocationResponse {

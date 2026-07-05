@@ -173,7 +173,7 @@ import {
 import { mapHeaders } from "./lib/auth-utils.js";
 import { auth } from "./lib/auth.js";
 import { createCorsOptionsDelegate, createRejectUntrustedOriginHook } from "./lib/cors.js";
-import { AKASH_LEAN_MODE, IS_CLOUD } from "./lib/const.js";
+import { AKASH_LEAN_MODE, IS_CLOUD, REVENUE_ATTRIBUTION } from "./lib/const.js";
 import { reengagementService } from "./services/reengagement/reengagementService.js";
 import { telemetryService } from "./services/telemetryService.js";
 import { handleIdentify } from "./services/tracker/identifyService.js";
@@ -563,6 +563,13 @@ async function runBackgroundInitialization() {
 
     telemetryService.startTelemetryCron();
     usageService.startUsageCheckCron();
+    if (REVENUE_ATTRIBUTION) {
+      const { syncAllConnectedStripeSites } = await import("./services/revenue/stripeRevenueService.js");
+      const stripeSyncIntervalMs = 10 * 60 * 1000;
+      setInterval(() => void syncAllConnectedStripeSites(), stripeSyncIntervalMs);
+      setTimeout(() => void syncAllConnectedStripeSites(), 30_000);
+      server.log.info("Stripe revenue auto-sync scheduled (every 10 minutes)");
+    }
     if (IS_CLOUD && process.env.NODE_ENV !== "development") {
       weeklyReportService.startWeeklyReportCron();
       reengagementService.startReengagementCron();

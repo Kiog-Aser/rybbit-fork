@@ -102,9 +102,12 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
               {t("Add this endpoint in Stripe and paste the signing secret below when reconnecting.")}
             </p>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("Revenue syncs automatically every few minutes and when you open the dashboard.")}
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button
-              variant="default"
+              variant="outline"
               disabled={disabled || isSyncing}
               onClick={() =>
                 syncRevenue(undefined, {
@@ -112,8 +115,8 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
                     const count = data?.imported ?? 0;
                     toast.success(
                       count > 0
-                        ? `Synced ${count} payment${count === 1 ? "" : "s"} from Stripe`
-                        : t("Stripe sync complete — no new payments in the last 90 days")
+                        ? `Imported ${count} payment${count === 1 ? "" : "s"} from Stripe`
+                        : t("Up to date — no new payments in the last 90 days")
                     );
                     refetch();
                   },
@@ -122,7 +125,7 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
                 })
               }
             >
-              {isSyncing ? t("Syncing...") : t("Sync last 90 days")}
+              {isSyncing ? t("Syncing...") : t("Force re-sync (90 days)")}
             </Button>
             <ConfirmationModal
               title={t("Disconnect Stripe?")}

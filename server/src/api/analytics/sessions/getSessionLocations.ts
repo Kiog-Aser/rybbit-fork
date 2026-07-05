@@ -33,6 +33,8 @@ WITH stuff AS (
         site_id = {site:Int32}
         ${timeStatement}
         ${filterStatement}
+        AND lat != 0
+        AND lon != 0
     GROUP BY
         session_id
 )

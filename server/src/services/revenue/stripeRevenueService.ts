@@ -1,9 +1,15 @@
 import { eq } from "drizzle-orm";
+import { DateTime } from "luxon";
 import Stripe from "stripe";
 import { clickhouse } from "../../db/clickhouse/clickhouse.js";
 import { db } from "../../db/postgres/postgres.js";
 import { siteStripeConnections } from "../../db/postgres/schema.js";
+import { createServiceLogger } from "../../lib/logger/logger.js";
 import { decryptSecret, encryptSecret } from "../../lib/revenueEncryption.js";
+
+const revenueLogger = createServiceLogger("stripe-revenue");
+const revenueSyncLastRun = new Map<number, number>();
+const REVENUE_SYNC_COOLDOWN_MS = 2 * 60 * 1000;
 
 // Stripe's restricted-key creator uses rak_* permission slugs (same flow as DataFast).
 const STRIPE_RAK_PERMISSIONS = [
@@ -53,16 +59,15 @@ async function revenuePaymentExists(siteId: number, stripePaymentId: string): Pr
   return rows.length > 0;
 }
 
-export async function backfillStripeRevenue(siteId: number, days = 90): Promise<number> {
+async function importStripePaymentsSince(siteId: number, sinceUnix: number): Promise<number> {
   const connection = await getSiteStripeConnection(siteId);
   if (!connection) return 0;
 
   const stripe = getStripeClientForSite(connection);
-  const since = Math.floor(Date.now() / 1000) - days * 86_400;
   let imported = 0;
 
   for await (const paymentIntent of stripe.paymentIntents.list({
-    created: { gte: since },
+    created: { gte: sinceUnix },
     limit: 100,
   })) {
     if (paymentIntent.status !== "succeeded" || paymentIntent.amount_received <= 0) continue;
@@ -82,7 +87,7 @@ export async function backfillStripeRevenue(siteId: number, days = 90): Promise<
   }
 
   for await (const charge of stripe.charges.list({
-    created: { gte: since },
+    created: { gte: sinceUnix },
     limit: 100,
   })) {
     if (charge.status !== "succeeded" || !charge.paid || charge.amount <= 0) continue;
@@ -102,14 +107,59 @@ export async function backfillStripeRevenue(siteId: number, days = 90): Promise<
     imported++;
   }
 
-  if (imported > 0) {
-    await db
-      .update(siteStripeConnections)
-      .set({ lastSyncAt: new Date().toISOString() })
-      .where(eq(siteStripeConnections.siteId, siteId));
-  }
+  await db
+    .update(siteStripeConnections)
+    .set({ lastSyncAt: new Date().toISOString() })
+    .where(eq(siteStripeConnections.siteId, siteId));
 
   return imported;
+}
+
+export async function backfillStripeRevenue(siteId: number, days = 90): Promise<number> {
+  const since = Math.floor(Date.now() / 1000) - days * 86_400;
+  return importStripePaymentsSince(siteId, since);
+}
+
+export async function syncStripeRevenueIncremental(siteId: number): Promise<number> {
+  const connection = await getSiteStripeConnection(siteId);
+  if (!connection) return 0;
+
+  const since = connection.lastSyncAt
+    ? Math.floor(new Date(connection.lastSyncAt).getTime() / 1000) - 86_400
+    : Math.floor(Date.now() / 1000) - 90 * 86_400;
+
+  return importStripePaymentsSince(siteId, since);
+}
+
+/** Pull new Stripe payments before serving revenue stats (rate-limited per site). */
+export async function ensureStripeRevenueSynced(siteId: number): Promise<void> {
+  const now = Date.now();
+  const last = revenueSyncLastRun.get(siteId) ?? 0;
+  if (now - last < REVENUE_SYNC_COOLDOWN_MS) return;
+
+  const connection = await getSiteStripeConnection(siteId);
+  if (!connection) return;
+
+  revenueSyncLastRun.set(siteId, now);
+  try {
+    const imported = await syncStripeRevenueIncremental(siteId);
+    if (imported > 0) {
+      revenueLogger.info({ siteId, imported }, "Auto-synced Stripe revenue");
+    }
+  } catch (error) {
+    revenueLogger.warn({ err: error, siteId }, "Automatic Stripe revenue sync failed");
+  }
+}
+
+export async function syncAllConnectedStripeSites(): Promise<void> {
+  const connections = await db.select({ siteId: siteStripeConnections.siteId }).from(siteStripeConnections);
+  for (const { siteId } of connections) {
+    try {
+      await syncStripeRevenueIncremental(siteId);
+    } catch (error) {
+      revenueLogger.warn({ err: error, siteId }, "Periodic Stripe revenue sync failed");
+    }
+  }
 }
 
 export async function connectSiteStripe(siteId: number, restrictedKey: string, webhookSecret?: string) {
@@ -159,7 +209,9 @@ export async function recordRevenueEvent(input: {
   customerEmailHash?: string;
   timestamp?: Date;
 }) {
-  const timestamp = input.timestamp ?? new Date();
+  const timestamp = DateTime.fromJSDate(input.timestamp ?? new Date())
+    .toUTC()
+    .toFormat("yyyy-MM-dd HH:mm:ss");
   await clickhouse.insert({
     table: "revenue_events",
     values: [

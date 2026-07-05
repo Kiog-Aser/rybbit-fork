@@ -83,26 +83,33 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=changeme
-      - BETTER_AUTH_SECRET=replace-me
-      - BASE_URL=https://your-domain.com
+      - BETTER_AUTH_SECRET=replace-me-with-long-random-string
+      - BASE_URL=https://analytics.milh.tech
       - DISABLE_SIGNUP=true
       - DISABLE_TELEMETRY=true
     expose:
       - port: 3001
         to:
-          - service: client
+          - service: caddy
 
   client:
     image: ghcr.io/kiog-aser/rybbit-client:akash
     env:
       - NODE_ENV=production
-      - NEXT_PUBLIC_BACKEND_URL=https://your-domain.com
+      - NEXT_PUBLIC_BACKEND_URL=https://analytics.milh.tech
       - NEXT_PUBLIC_LITE_DASHBOARD=true
       - NEXT_PUBLIC_DEPLOYMENT=akash
       - NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
       - NEXT_PUBLIC_DISABLE_SIGNUP=true
     expose:
       - port: 3002
+        to:
+          - service: caddy
+
+  caddy:
+    image: ghcr.io/kiog-aser/rybbit-caddy:akash
+    expose:
+      - port: 80
         as: 80
         to:
           - global: true
@@ -159,6 +166,14 @@ profiles:
           size: 256Mi
         storage:
           size: 512Mi
+    caddy:
+      resources:
+        cpu:
+          units: 0.1
+        memory:
+          size: 64Mi
+        storage:
+          size: 256Mi
   placement:
     dcloud:
       pricing:
@@ -177,6 +192,9 @@ profiles:
         client:
           denom: uact
           amount: 100
+        caddy:
+          denom: uact
+          amount: 50
 
 deployment:
   clickhouse:
@@ -198,4 +216,8 @@ deployment:
   client:
     dcloud:
       profile: client
+      count: 1
+  caddy:
+    dcloud:
+      profile: caddy
       count: 1

@@ -65,3 +65,12 @@ jobs:
             NEXT_PUBLIC_LITE_DASHBOARD=true
             NEXT_PUBLIC_DEPLOYMENT=akash
             NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
+
+      - name: Build and push caddy
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./akash/caddy.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-caddy:${{ env.TAG }}

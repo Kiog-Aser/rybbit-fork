@@ -33,7 +33,7 @@ services:
           readOnly: false
 
   postgres:
-    image: postgres:17.4-alpine
+    image: postgres:16-alpine
     args:
       - postgres
       - -c
@@ -41,16 +41,13 @@ services:
       - -c
       - effective_cache_size=96MB
       - -c
-      - work_mem=4MB
+      - work_mem=2MB
       - -c
-      - maintenance_work_mem=32MB
+      - maintenance_work_mem=16MB
       - -c
       - max_connections=20
-      - -c
-      - wal_buffers=4MB
-      - -c
-      - max_wal_size=128MB
     env:
+      - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_USER=frog
       - POSTGRES_PASSWORD=changeme
       - POSTGRES_DB=analytics
@@ -160,9 +157,9 @@ profiles:
         memory:
           size: 1Gi
         storage:
-          - size: 512Mi
+          - size: 1Gi
           - name: data
-            size: 1Gi
+            size: 2Gi
             attributes:
               persistent: true
               class: beta3

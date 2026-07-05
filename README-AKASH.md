@@ -150,7 +150,7 @@ Rybbit is AGPL-3. If you modify this fork and let users interact with it over a 
 | Issue | Fix |
 |-------|-----|
 | **502 on `/api/*` (login broken)** | Backend group must show **1 ready replica**. Rebuild with `akash-v2` image tag, update SDL, redeploy. Click **View logs** on the backend group if still 0. |
-| **Postgres 0 ready replicas** | Use **768Mi** in SDL. If still failing after redeploy, the data volume may be corrupt — **close deployment and create a fresh one** (you'll lose DB data). |
+| **Postgres 0 ready replicas, no logs** | Set `PGDATA=/var/lib/postgresql/data/pgdata` in postgres env (Akash persistent volumes put `lost+found` on the mount root and initdb fails). Use **1Gi** RAM. If still 0 after redeploy, **close deployment and create a fresh one** (wipes DB volume). |
 | **Backend 0 ready replicas** | Old image OOM'd on startup. `akash-v2` image drops GeoLite + lowers Node heap. Confirm SDL uses `rybbit-backend:akash-v2`. |
 | `demo.rybbit.com` ERR_BLOCKED_BY_CLIENT | Harmless — login page globe widget + ad blocker; not your API |
 | Revenue page empty | Confirm webhook fires, metadata on checkout, signing secret set |

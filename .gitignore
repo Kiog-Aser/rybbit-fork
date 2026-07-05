@@ -52,5 +52,7 @@ coverage/
 .deepsec/
 
 .github/
+!.github/workflows/
+!.github/workflows/akash-images.yml
 
 .impeccable/critique

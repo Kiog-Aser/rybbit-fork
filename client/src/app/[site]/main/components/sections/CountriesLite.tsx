@@ -7,13 +7,12 @@ import {
   type StandardSectionTab,
 } from "../../../components/shared/StandardSection/StandardSectionTabs";
 import { CountryFlag } from "../../../components/shared/icons/CountryFlag";
+import { MapComponent } from "../../../components/shared/Map/MapComponent";
 
-// Lite Countries section: country only (regions/cities tabs require deeper
-// dimensions than the country MV stores).
 export function CountriesLite() {
   const t = useExtracted();
 
-  const tabs: StandardSectionTab<"countries">[] = [
+  const tabs: StandardSectionTab<"countries" | "map">[] = [
     {
       value: "countries",
       label: t("Countries"),
@@ -30,6 +29,11 @@ export function CountriesLite() {
         ),
         lite: true,
       },
+    },
+    {
+      value: "map",
+      label: t("Map"),
+      content: <MapComponent height="340px" />,
     },
   ];
 

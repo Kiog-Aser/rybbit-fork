@@ -15,8 +15,23 @@ function escapeClickHouseString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-function isValidRowTime(time: string): boolean {
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(time);
+function normalizeRowTime(time: string): string | null {
+  const trimmed = time.trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const fromIso = DateTime.fromISO(trimmed, { zone: "utc" });
+  if (fromIso.isValid) {
+    return fromIso.toFormat("yyyy-MM-dd HH:mm:ss");
+  }
+
+  const fromSql = DateTime.fromSQL(trimmed, { zone: "utc" });
+  if (fromSql.isValid) {
+    return fromSql.toFormat("yyyy-MM-dd HH:mm:ss");
+  }
+
+  return null;
 }
 
 function buildSessionHourlySelect(siteId: number, importId: string, row: RybbitTimeseriesRow): string {
@@ -93,12 +108,16 @@ export async function instantImportRybbitExport(args: {
 }): Promise<{ importedDays: number; skippedDays: number; importedPageviews: number }> {
   const { siteId, importId, rows } = args;
 
-  const activeRows = rows.filter(row => {
-    if (!isValidRowTime(row.time)) return false;
+  const activeRows = rows.flatMap(row => {
+    const normalizedTime = normalizeRowTime(row.time);
+    if (!normalizedTime) return [];
+
     const sessions = Math.max(0, Math.floor(row.sessions));
     const pageviews = Math.max(0, Math.floor(row.pageviews));
     const users = Math.max(0, Math.floor(row.users));
-    return sessions > 0 || pageviews > 0 || users > 0;
+    if (sessions === 0 && pageviews === 0 && users === 0) return [];
+
+    return [{ ...row, time: normalizedTime }];
   });
 
   if (activeRows.length === 0) {
@@ -142,12 +161,17 @@ export function filterRowsByAllowedDateRange(
   const allowed: RybbitTimeseriesRow[] = [];
 
   for (const row of rows) {
-    const dt = DateTime.fromFormat(row.time, "yyyy-MM-dd HH:mm:ss", { zone: "utc" });
+    const normalizedTime = normalizeRowTime(row.time);
+    if (!normalizedTime) {
+      skipped++;
+      continue;
+    }
+    const dt = DateTime.fromFormat(normalizedTime, "yyyy-MM-dd HH:mm:ss", { zone: "utc" });
     if (!dt.isValid || dt < earliest || dt > latest) {
       skipped++;
       continue;
     }
-    allowed.push(row);
+    allowed.push({ ...row, time: normalizedTime });
   }
 
   return { allowed, skipped };

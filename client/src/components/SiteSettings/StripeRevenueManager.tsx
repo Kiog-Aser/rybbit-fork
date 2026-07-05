@@ -1,6 +1,11 @@
 "use client";
 
-import { useConnectStripeRevenue, useDisconnectStripeRevenue, useStripeRevenueStatus } from "@/api/revenue/hooks";
+import {
+  useConnectStripeRevenue,
+  useDisconnectStripeRevenue,
+  useStripeRevenueStatus,
+  useSyncStripeRevenue,
+} from "@/api/revenue/hooks";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +27,7 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
   const { data: status, isLoading, refetch } = useStripeRevenueStatus();
   const { mutate: connect, isPending: isConnecting } = useConnectStripeRevenue();
   const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectStripeRevenue();
+  const { mutate: syncRevenue, isPending: isSyncing } = useSyncStripeRevenue();
   const [restrictedKey, setRestrictedKey] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
@@ -38,8 +44,11 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
       { restrictedKey: restrictedKey.trim(), webhookSecret: webhookSecret.trim() || undefined },
       {
         onSuccess: () => {
-          toast.success(t("Stripe connected for revenue attribution"));
+          toast.success(
+            t("Stripe connected — syncing the last 90 days of payments. Revenue may take a moment to appear.")
+          );
           setRestrictedKey("");
+          setWebhookSecret("");
           refetch();
         },
         onError: (error: Error) =>
@@ -93,18 +102,46 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
               {t("Add this endpoint in Stripe and paste the signing secret below when reconnecting.")}
             </p>
           </div>
-          <ConfirmationModal
-            title={t("Disconnect Stripe?")}
-            description={t("Revenue attribution will stop until you connect again.")}
-            isOpen={isDisconnectModalOpen}
-            setIsOpen={setIsDisconnectModalOpen}
-            onConfirm={handleDisconnect}
-            primaryAction={{ variant: "destructive", children: t("Disconnect") }}
-          >
-            <Button variant="outline" disabled={disabled || isDisconnecting}>
-              {isDisconnecting ? t("Disconnecting...") : t("Disconnect")}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              disabled={disabled || isSyncing}
+              onClick={() =>
+                syncRevenue(undefined, {
+                  onSuccess: data => {
+                    const count = data?.imported ?? 0;
+                    toast.success(
+                      count > 0
+                        ? `Synced ${count} payment${count === 1 ? "" : "s"} from Stripe`
+                        : t("Stripe sync complete — no new payments in the last 90 days")
+                    );
+                    refetch();
+                  },
+                  onError: (error: Error) =>
+                    toast.error(error.message || t("Failed to sync Stripe revenue")),
+                })
+              }
+            >
+              {isSyncing ? t("Syncing...") : t("Sync last 90 days")}
             </Button>
-          </ConfirmationModal>
+            <ConfirmationModal
+              title={t("Disconnect Stripe?")}
+              description={t("Revenue attribution will stop until you connect again.")}
+              isOpen={isDisconnectModalOpen}
+              setIsOpen={setIsDisconnectModalOpen}
+              onConfirm={handleDisconnect}
+              primaryAction={{ variant: "destructive", children: t("Disconnect") }}
+            >
+              <Button variant="outline" disabled={disabled || isDisconnecting}>
+                {isDisconnecting ? t("Disconnecting...") : t("Disconnect")}
+              </Button>
+            </ConfirmationModal>
+          </div>
+          {status?.lastSyncAt && (
+            <p className="text-xs text-muted-foreground">
+              {t("Last synced")}: {new Date(status.lastSyncAt).toLocaleString()}
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

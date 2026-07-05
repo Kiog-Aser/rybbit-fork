@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { REVENUE_ATTRIBUTION } from "../../lib/const.js";
 import {
+  backfillStripeRevenue,
   connectSiteStripe,
   disconnectSiteStripe,
   getSiteStripeConnection,
@@ -45,10 +46,34 @@ export async function connectStripeRevenue(
   const siteId = Number(request.params.siteId);
   try {
     await connectSiteStripe(siteId, parsed.data.restrictedKey, parsed.data.webhookSecret);
-    return reply.send({ success: true });
+    return reply.send({ success: true, backfilled: true });
   } catch (error) {
     return reply.status(400).send({
       error: error instanceof Error ? error.message : "Failed to connect Stripe",
+    });
+  }
+}
+
+export async function syncStripeRevenue(
+  request: FastifyRequest<{ Params: { siteId: string } }>,
+  reply: FastifyReply
+) {
+  if (!REVENUE_ATTRIBUTION) {
+    return reply.status(404).send({ error: "Revenue attribution is disabled" });
+  }
+
+  const siteId = Number(request.params.siteId);
+  const connection = await getSiteStripeConnection(siteId);
+  if (!connection) {
+    return reply.status(400).send({ error: "Stripe is not connected for this site" });
+  }
+
+  try {
+    const imported = await backfillStripeRevenue(siteId, 90);
+    return reply.send({ success: true, imported });
+  } catch (error) {
+    return reply.status(400).send({
+      error: error instanceof Error ? error.message : "Failed to sync Stripe revenue",
     });
   }
 }

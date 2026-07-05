@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import Papa from "papaparse";
+import { DateTime } from "luxon";
 import { authedFetch } from "@/api/utils";
 
 export interface RybbitTimeseriesRow {
@@ -16,6 +17,22 @@ function parseNumber(value: string | undefined): number {
   if (!value) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeRowTime(time: string): string {
+  const trimmed = time.trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const fromIso = DateTime.fromISO(trimmed, { zone: "utc" });
+  if (fromIso.isValid) {
+    return fromIso.toFormat("yyyy-MM-dd HH:mm:ss");
+  }
+  const fromSql = DateTime.fromSQL(trimmed, { zone: "utc" });
+  if (fromSql.isValid) {
+    return fromSql.toFormat("yyyy-MM-dd HH:mm:ss");
+  }
+  return "";
 }
 
 export async function parseRybbitExportZip(file: File): Promise<RybbitTimeseriesRow[]> {
@@ -38,7 +55,7 @@ export async function parseRybbitExportZip(file: File): Promise<RybbitTimeseries
 
   return parsed.data
     .map(row => ({
-      time: row.time?.trim() ?? "",
+      time: normalizeRowTime(row.time ?? ""),
       sessions: parseNumber(row.sessions),
       pages_per_session: parseNumber(row.pages_per_session),
       bounce_rate: parseNumber(row.bounce_rate),

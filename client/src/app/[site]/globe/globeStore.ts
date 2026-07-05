@@ -14,7 +14,7 @@ interface GlobeStore {
 }
 
 export const useGlobeStore = create<GlobeStore>(set => ({
-  mapView: "timeline",
+  mapView: IS_CLOUD ? "timeline" : "coordinates",
   setMapView: view => set({ mapView: view }),
   mapMode: IS_CLOUD ? "3D" : "2D",
   setMapMode: mode => set({ mapMode: mode }),

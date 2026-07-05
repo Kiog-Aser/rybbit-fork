@@ -24,12 +24,12 @@ export function MainSectionLite() {
 
   const getSelectedStatLabel = () => {
     switch (selectedStat) {
+      case "users": return t("Visitors");
+      case "bounce_rate": return t("Bounce rate");
+      case "session_duration": return t("Session time");
       case "pageviews": return t("Pageviews");
       case "sessions": return t("Sessions");
       case "pages_per_session": return t("Pages per Session");
-      case "bounce_rate": return t("Bounce Rate");
-      case "session_duration": return t("Session Duration");
-      case "users": return t("Users");
       default: return selectedStat;
     }
   };

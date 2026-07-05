@@ -13,6 +13,10 @@ type BotOverviewResponse = {
   client_signals: number;
   bot_asn: number;
   rate_anomaly: number;
+  category_all: number;
+  category_ai_answers: number;
+  category_indexing: number;
+  category_training: number;
 };
 
 export interface BotOverviewRequest {
@@ -62,6 +66,17 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
         WHERE site_id = {siteId:Int32}
           ${filterStatement}
           ${timeStatement}
+      ),
+      category_stats AS (
+        SELECT
+          count() AS category_all,
+          countIf(bot_category = 'ai') AS category_ai_answers,
+          countIf(bot_category = 'search') AS category_indexing,
+          countIf(bot_category IN ('seo', 'monitoring')) AS category_training
+        FROM bot_events
+        WHERE site_id = {siteId:Int32}
+          ${filterStatement}
+          ${timeStatement}
       )
     SELECT
       bot_requests,
@@ -75,10 +90,15 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
       header_heuristics,
       client_signals,
       bot_asn,
-      rate_anomaly
+      rate_anomaly,
+      category_all,
+      category_ai_answers,
+      category_indexing,
+      category_training
     FROM bot_stats
     CROSS JOIN all_bot_stats
     CROSS JOIN event_stats
+    CROSS JOIN category_stats
   `;
 };
 

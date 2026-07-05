@@ -44,7 +44,7 @@ export async function deleteSiteImport(request: FastifyRequest<DeleteImportReque
       return reply.status(403).send({ error: "Import does not belong to this site" });
     }
 
-    if (importRecord.completedAt === null) {
+    if (importRecord.completedAt === null && IS_CLOUD) {
       return reply.status(400).send({ error: "Cannot delete active import" });
     }
 

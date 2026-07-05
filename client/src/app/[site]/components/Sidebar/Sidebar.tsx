@@ -83,14 +83,12 @@ function SidebarContent() {
           href={getTabPath("main")}
           icon={<LayoutDashboard className="w-4 h-4" />}
         />
-        {!AKASH_LEAN && (
-          <SidebarComponents.Item
-            label={t("Globe")}
-            active={isActiveTab("globe")}
-            href={getTabPath("globe")}
-            icon={<Globe2 className="w-4 h-4" />}
-          />
-        )}
+        <SidebarComponents.Item
+          label={t("Globe")}
+          active={isActiveTab("globe")}
+          href={getTabPath("globe")}
+          icon={<Globe2 className="w-4 h-4" />}
+        />
         {IS_CLOUD && (
           <SidebarComponents.Item
             label={t("Pages")}

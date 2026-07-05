@@ -10,7 +10,7 @@ import { importQuotaManager } from "../../services/import/importQuotaManager.js"
 import {
   completeImport,
   getImportById,
-  updateImportProgress,
+  setImportProgress,
 } from "../../services/import/importStatusManager.js";
 import {
   filterRowsByAllowedDateRange,
@@ -121,7 +121,12 @@ export async function instantRybbitExportImport(
         rows: allowed,
       });
 
-      await updateImportProgress(importId, result.importedPageviews, skippedByDate + result.skippedDays, 0);
+      await setImportProgress(
+        importId,
+        result.importedPageviews,
+        skippedByDate + result.skippedDays,
+        0
+      );
       await completeImport(importId);
       importQuotaManager.completeImport(siteRecord.organizationId);
 

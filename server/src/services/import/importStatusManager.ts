@@ -38,6 +38,22 @@ export async function updateImportProgress(
     .where(eq(importStatus.importId, importId));
 }
 
+export async function setImportProgress(
+  importId: string,
+  importedEvents: number,
+  skippedEvents: number,
+  invalidEvents: number
+): Promise<void> {
+  await db
+    .update(importStatus)
+    .set({
+      importedEvents,
+      skippedEvents,
+      invalidEvents,
+    })
+    .where(eq(importStatus.importId, importId));
+}
+
 export async function completeImport(importId: string): Promise<void> {
   await db
     .update(importStatus)

@@ -5,6 +5,7 @@ import { buildApiParams } from "../utils";
 import {
   connectStripeRevenue,
   disconnectStripeRevenue,
+  syncStripeRevenue,
   fetchRevenueOverview,
   fetchRevenueTimeSeries,
   fetchStripeRevenueStatus,
@@ -49,7 +50,11 @@ export function useConnectStripeRevenue() {
   return useMutation({
     mutationFn: (input: { restrictedKey: string; webhookSecret?: string }) =>
       connectStripeRevenue(site!, input.restrictedKey, input.webhookSecret),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stripe-revenue-status", site] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stripe-revenue-status", site] });
+      queryClient.invalidateQueries({ queryKey: ["revenue-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["revenue-time-series"] });
+    },
   });
 }
 
@@ -59,6 +64,19 @@ export function useDisconnectStripeRevenue() {
   return useMutation({
     mutationFn: () => disconnectStripeRevenue(site!),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stripe-revenue-status", site] }),
+  });
+}
+
+export function useSyncStripeRevenue() {
+  const queryClient = useQueryClient();
+  const { site } = useStore();
+  return useMutation({
+    mutationFn: () => syncStripeRevenue(site!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stripe-revenue-status", site] });
+      queryClient.invalidateQueries({ queryKey: ["revenue-overview", site] });
+      queryClient.invalidateQueries({ queryKey: ["revenue-time-series", site] });
+    },
   });
 }
 

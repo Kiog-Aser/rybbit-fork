@@ -37,8 +37,10 @@ export default function BotsPage() {
       <SubHeader availableFilters={BOT_AVAILABLE_FILTERS} />
       <div className="space-y-4">
         <BotsOverview />
-        <BotCrawlers />
-        <BotChart />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <BotChart />
+          <BotCrawlers />
+        </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
         <LazySection>

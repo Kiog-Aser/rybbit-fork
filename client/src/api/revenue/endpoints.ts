@@ -48,6 +48,14 @@ export async function disconnectStripeRevenue(siteId: string | number) {
   );
 }
 
+export async function syncStripeRevenue(siteId: string | number) {
+  return authedFetch<{ success: boolean; imported: number }>(
+    `/sites/${siteId}/revenue/stripe/sync`,
+    undefined,
+    { method: "POST" }
+  );
+}
+
 export async function fetchRevenueOverview(siteId: string | number, startTime: string, endTime: string) {
   const params = new URLSearchParams({ startTime, endTime });
   const response = await authedFetch<{ data: RevenueOverviewResponse }>(

@@ -1,89 +1,86 @@
 "use client";
 
 import NumberFlow from "@number-flow/react";
+import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useGetBotDimension } from "../../../../api/analytics/hooks/bots/useGetBotDimension";
 import { Card, CardContent, CardLoader } from "../../../../components/ui/card";
+import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { getCrawlerDisplayName } from "../../../../lib/botCrawlerNames";
-import { cn } from "../../../../lib/utils";
+import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../lib/botCrawlerNames";
 import { useStore } from "../../../../lib/store";
-import { type BotCategoryFilter, useBotsStore } from "../botsStore";
-
-const CATEGORY_PILLS: { key: BotCategoryFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "ai_answers", label: "AI answers" },
-  { key: "indexing", label: "Indexing" },
-  { key: "training", label: "Training" },
-];
 
 export function BotCrawlers() {
   const { site } = useStore();
-  const { selectedCategory, setSelectedCategory } = useBotsStore();
+  const [query, setQuery] = useState("");
   const { data, isLoading, isFetching } = useGetBotDimension({
     site,
     dimension: "matched_ua_pattern",
-    limit: 25,
+    limit: 50,
     page: 1,
   });
 
-  const crawlers =
-    data?.data?.data.filter(item => item.value && item.value !== "").slice(0, 12) ?? [];
-  const maxCount = crawlers[0]?.count ?? 1;
+  const crawlers = useMemo(() => {
+    const items = data?.data?.data.filter(item => item.value && item.value !== "") ?? [];
+    const needle = query.trim().toLowerCase();
+    const filtered = needle
+      ? items.filter(item => getCrawlerDisplayName(item.value).toLowerCase().includes(needle))
+      : items;
+
+    return filtered.slice(0, 12);
+  }, [data?.data?.data, query]);
 
   return (
     <Card>
       {isFetching && <CardLoader />}
       <CardContent className="p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Crawlers</h3>
-            <p className="text-xs text-muted-foreground">Known bots hitting your site, grouped by user-agent pattern</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORY_PILLS.map(pill => (
-              <button
-                key={pill.key}
-                type="button"
-                onClick={() => setSelectedCategory(pill.key)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                  selectedCategory === pill.key
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
-                )}
-              >
-                {pill.label}
-              </button>
-            ))}
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-foreground">Search crawlers</h3>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Search crawlers"
+              className="pl-8 h-9"
+            />
           </div>
         </div>
 
         {isLoading ? (
           <div className="space-y-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full rounded-md" />
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-lg" />
             ))}
           </div>
         ) : crawlers.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">
-            No crawler traffic in this period. Bots are logged when bot blocking is enabled on the site.
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            No crawler traffic in this period yet.
           </p>
         ) : (
           <div className="space-y-1.5">
-            {crawlers.map(item => (
-              <div key={item.value} className="relative flex items-center h-8 rounded-md overflow-hidden">
+            {crawlers.map(item => {
+              const label = getCrawlerDisplayName(item.value);
+              const brand = getCrawlerBrandStyle(label);
+
+              return (
                 <div
-                  className="absolute inset-y-0 left-0 bg-dataviz/25 rounded-md"
-                  style={{ width: `${(item.count / maxCount) * 100}%` }}
-                />
-                <div className="relative z-10 flex w-full items-center justify-between gap-3 px-2 text-xs">
-                  <span className="font-medium truncate">{getCrawlerDisplayName(item.value)}</span>
-                  <span className="shrink-0 text-muted-foreground">
+                  key={item.value}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5"
+                  style={{ backgroundColor: brand.background }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base leading-none">{brand.emoji}</span>
+                    <span className="text-sm font-medium truncate" style={{ color: brand.foreground }}>
+                      {label}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: brand.foreground }}>
                     <NumberFlow respectMotionPreference={false} value={item.count} format={{ notation: "compact" }} />
                   </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>

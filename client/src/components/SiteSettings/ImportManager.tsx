@@ -31,6 +31,7 @@ import { PlausibleCsvParser } from "@/lib/import/plausibleParser";
 import { instantImportRybbitExport, parseRybbitExportZip } from "@/lib/import/rybbitExportParser";
 import { ImportPlatform } from "@/types/import";
 import { DisabledOverlay } from "@/components/DisabledOverlay";
+import { toast } from "@/components/ui/sonner";
 
 interface ImportManagerProps {
   siteId: number;
@@ -134,8 +135,17 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
           try {
             if (platform === "rybbit_export") {
               const timeseries = await parseRybbitExportZip(file);
-              await instantImportRybbitExport(siteId, importId, timeseries);
+              const result = await instantImportRybbitExport(siteId, importId, timeseries);
+              toast.success(
+                `Imported ${result.importedDays} days (${result.importedPageviews.toLocaleString()} pageviews)`
+              );
               await queryClient.invalidateQueries({ queryKey: ["get-site-imports", siteId] });
+              await queryClient.invalidateQueries({ queryKey: ["overview"] });
+              await queryClient.invalidateQueries({ queryKey: ["overview-bucketed"] });
+              await queryClient.invalidateQueries({ queryKey: ["overview-bucketed-past-minutes"] });
+              await queryClient.invalidateQueries({ queryKey: ["metric"] });
+              await queryClient.invalidateQueries({ queryKey: ["revenue-overview"] });
+              await queryClient.invalidateQueries({ queryKey: ["revenue-time-series"] });
             } else if (platform === "plausible") {
               const parser = new PlausibleCsvParser(
                 siteId,
@@ -158,6 +168,8 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
             }
           } catch (err) {
             console.error("Import failed:", err);
+            toast.error(err instanceof Error ? err.message : "Import failed");
+            await queryClient.invalidateQueries({ queryKey: ["get-site-imports", siteId] });
           }
 
           setSelectedFile(null);
@@ -432,7 +444,7 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
                             )}
                           </TableCell>
                           <TableCell className="text-center">
-                            {imp.completedAt !== null && (
+                            {(imp.completedAt !== null || !IS_CLOUD) && (
                               <Button
                                 variant="outline"
                                 size="sm"

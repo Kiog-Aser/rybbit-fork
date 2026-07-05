@@ -37,6 +37,81 @@ export async function getSiteStripeConnection(siteId: number) {
   return row ?? null;
 }
 
+async function revenuePaymentExists(siteId: number, stripePaymentId: string): Promise<boolean> {
+  const result = await clickhouse.query({
+    query: `
+      SELECT 1
+      FROM revenue_events
+      WHERE site_id = {siteId:UInt16}
+        AND stripe_payment_id = {stripePaymentId:String}
+      LIMIT 1
+    `,
+    query_params: { siteId, stripePaymentId },
+    format: "JSONEachRow",
+  });
+  const rows = (await result.json()) as unknown[];
+  return rows.length > 0;
+}
+
+export async function backfillStripeRevenue(siteId: number, days = 90): Promise<number> {
+  const connection = await getSiteStripeConnection(siteId);
+  if (!connection) return 0;
+
+  const stripe = getStripeClientForSite(connection);
+  const since = Math.floor(Date.now() / 1000) - days * 86_400;
+  let imported = 0;
+
+  for await (const paymentIntent of stripe.paymentIntents.list({
+    created: { gte: since },
+    limit: 100,
+  })) {
+    if (paymentIntent.status !== "succeeded" || paymentIntent.amount_received <= 0) continue;
+    if (await revenuePaymentExists(siteId, paymentIntent.id)) continue;
+
+    const attribution = extractAttributionFromMetadata(paymentIntent.metadata);
+    await recordRevenueEvent({
+      siteId,
+      stripePaymentId: paymentIntent.id,
+      amountCents: paymentIntent.amount_received,
+      currency: paymentIntent.currency,
+      status: "succeeded",
+      ...attribution,
+      timestamp: new Date(paymentIntent.created * 1000),
+    });
+    imported++;
+  }
+
+  for await (const charge of stripe.charges.list({
+    created: { gte: since },
+    limit: 100,
+  })) {
+    if (charge.status !== "succeeded" || !charge.paid || charge.amount <= 0) continue;
+    const paymentId = String(charge.payment_intent || charge.id);
+    if (await revenuePaymentExists(siteId, paymentId)) continue;
+
+    const attribution = extractAttributionFromMetadata(charge.metadata);
+    await recordRevenueEvent({
+      siteId,
+      stripePaymentId: paymentId,
+      amountCents: charge.amount,
+      currency: charge.currency,
+      status: "succeeded",
+      ...attribution,
+      timestamp: new Date(charge.created * 1000),
+    });
+    imported++;
+  }
+
+  if (imported > 0) {
+    await db
+      .update(siteStripeConnections)
+      .set({ lastSyncAt: new Date().toISOString() })
+      .where(eq(siteStripeConnections.siteId, siteId));
+  }
+
+  return imported;
+}
+
 export async function connectSiteStripe(siteId: number, restrictedKey: string, webhookSecret?: string) {
   if (!restrictedKey.startsWith("rk_live_") && !restrictedKey.startsWith("rk_test_")) {
     throw new Error("Stripe restricted key must start with rk_live_ or rk_test_");
@@ -62,6 +137,8 @@ export async function connectSiteStripe(siteId: number, restrictedKey: string, w
         connectedAt: new Date().toISOString(),
       },
     });
+
+  await backfillStripeRevenue(siteId, 90);
 }
 
 export async function disconnectSiteStripe(siteId: number) {

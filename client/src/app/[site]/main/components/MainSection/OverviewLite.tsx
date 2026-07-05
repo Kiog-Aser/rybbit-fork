@@ -6,6 +6,7 @@ import { cn, formatSecondsAsMinutesAndSeconds } from "@/lib/utils";
 import NumberFlow from "@number-flow/react";
 import { useExtracted } from "next-intl";
 import { useState } from "react";
+import { useGetLiveUserCount } from "../../../../../api/analytics/hooks/useGetLiveUserCount";
 import { useGetOverview } from "../../../../../api/analytics/hooks/useGetOverview";
 import { useGetOverviewBucketed } from "../../../../../api/analytics/hooks/useGetOverviewBucketed";
 import { useRevenueOverview, useStripeRevenueStatus } from "../../../../../api/revenue/hooks";
@@ -13,21 +14,13 @@ import { REVENUE_ATTRIBUTION } from "../../../../../lib/const";
 import { StatType, useStore } from "../../../../../lib/store";
 import { SparklinesChart } from "./SparklinesChart";
 
-// Lite variant of Overview: no previous-period queries, no comparison arrows.
-// Backed by MV endpoints; ~10x fewer ClickHouse rows scanned per render.
+type LiteStatType = StatType | "revenue" | "conversion_rate" | "revenue_per_visitor" | "online";
 
-type LiteStatType = StatType | "total_time";
+const formatRevenue = (cents: number) =>
+  `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-const formatTotalTimeSpent = (value: number) => {
-  const seconds = Math.max(0, Math.round(value));
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}hr ${minutes}min`;
-  return formatSecondsAsMinutesAndSeconds(seconds);
-};
+const formatRevenuePrecise = (cents: number) =>
+  `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const Stat = ({
   title,
@@ -38,19 +31,25 @@ const Stat = ({
   isLoading,
   decimals,
   postfix,
+  selectable = true,
+  accent,
+  trailing,
 }: {
   title: string;
   id: LiteStatType;
   value: number;
   valueFormatter?: (value: number) => string;
-  getBucketValue?: (bucket: any) => number;
+  getBucketValue?: (bucket: Record<string, number>) => number;
   isLoading: boolean;
   decimals?: number;
   postfix?: string;
+  selectable?: boolean;
+  accent?: string;
+  trailing?: React.ReactNode;
 }) => {
   const { selectedStat, setSelectedStat, site, bucket, time } = useStore();
   const [isHovering, setIsHovering] = useState(false);
-  const isSelectable = id !== "total_time";
+  const isSelectable = selectable && id !== "online";
 
   const { data } = useGetOverviewBucketed({ site, bucket, lite: true });
 
@@ -65,13 +64,13 @@ const Stat = ({
         }
         return true;
       })
-      .map((d: any) => ({
-        value: getBucketValue ? getBucketValue(d) : d[id],
+      .map((d: Record<string, number>) => ({
+        value: getBucketValue ? getBucketValue(d) : (d[id as StatType] ?? 0),
         time: d.time,
       })) ?? [];
 
   const handleClick = () => {
-    if (id !== "total_time") {
+    if (isSelectable && (id === "users" || id === "bounce_rate" || id === "session_duration")) {
       setSelectedStat(id);
     }
   };
@@ -79,7 +78,7 @@ const Stat = ({
   return (
     <div
       className={cn(
-        "flex flex-col border-r border-neutral-100 dark:border-neutral-800 last:border-r-0 text-nowrap",
+        "flex flex-col border-r border-neutral-100 dark:border-neutral-800 last:border-r-0 text-nowrap min-w-0",
         isSelectable ? "cursor-pointer" : "cursor-default",
         isSelectable && selectedStat === id && "bg-neutral-0 dark:bg-neutral-850"
       )}
@@ -89,13 +88,13 @@ const Stat = ({
     >
       <div className="flex flex-col px-3 py-2">
         <div className="text-xs font-medium text-muted-foreground">{title}</div>
-        <div className="text-2xl font-medium flex gap-2 items-center justify-between">
+        <div className={cn("text-2xl font-medium flex gap-2 items-center justify-between", accent)}>
           {isLoading ? (
             <Skeleton className="w-[60px] h-9 rounded-md" />
           ) : valueFormatter ? (
             valueFormatter(value)
           ) : (
-            <span>
+            <span className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger>
                   <NumberFlow
@@ -114,94 +113,115 @@ const Stat = ({
                 </TooltipContent>
               </Tooltip>
               {postfix && <span>{postfix}</span>}
+              {trailing}
             </span>
           )}
         </div>
       </div>
-      <div className="h-[40px] -mt-4">
-        <SparklinesChart data={sparklinesData} isHovering={isHovering} />
-      </div>
+      {selectable && id !== "online" && id !== "revenue" && id !== "conversion_rate" && id !== "revenue_per_visitor" && (
+        <div className="h-[40px] -mt-4">
+          <SparklinesChart data={sparklinesData} isHovering={isHovering} />
+        </div>
+      )}
     </div>
   );
 };
-
-const formatRevenue = (cents: number) =>
-  `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 export function OverviewLite() {
   const { site } = useStore();
   const t = useExtracted();
 
   const { data: overviewData, isLoading } = useGetOverview({ site, lite: true });
+  const { data: liveUsers, isLoading: liveLoading } = useGetLiveUserCount(5);
   const { data: stripeStatus } = useStripeRevenueStatus();
   const { data: revenueOverview, isLoading: revenueLoading } = useRevenueOverview();
   const showRevenue = REVENUE_ATTRIBUTION;
   const stripeConnected = Boolean(stripeStatus?.connected);
 
-  const users = overviewData?.data?.users ?? 0;
-  const sessions = overviewData?.data?.sessions ?? 0;
-  const pageviews = overviewData?.data?.pageviews ?? 0;
-  const pagesPerSession = overviewData?.data?.pages_per_session ?? 0;
+  const visitors = overviewData?.data?.users ?? 0;
   const bounceRate = overviewData?.data?.bounce_rate ?? 0;
   const sessionDuration = overviewData?.data?.session_duration ?? 0;
-  const totalTimeSpent = sessionDuration * sessions;
 
   const revenueCents = revenueOverview?.totals.revenue_cents ?? 0;
+  const paymentCount = revenueOverview?.totals.payment_count ?? 0;
+  const conversionRate = visitors > 0 ? (paymentCount / visitors) * 100 : 0;
+  const revenuePerVisitorCents = visitors > 0 ? revenueCents / visitors : 0;
+  const onlineCount = liveUsers?.count ?? 0;
 
   return (
     <div
-      className={`grid grid-cols-2 md:grid-cols-3 gap-0 items-center ${showRevenue ? "lg:grid-cols-8" : "lg:grid-cols-7"}`}
-    >
-      <Stat title={t("Unique Users")} id="users" value={users} isLoading={isLoading} />
-      <Stat title={t("Sessions")} id="sessions" value={sessions} isLoading={isLoading} />
-      <Stat title={t("Pageviews")} id="pageviews" value={pageviews} isLoading={isLoading} />
-      <Stat
-        title={t("Pages per Session")}
-        id="pages_per_session"
-        value={pagesPerSession}
-        decimals={1}
-        isLoading={isLoading}
-      />
-      <Stat
-        title={t("Bounce Rate")}
-        id="bounce_rate"
-        value={bounceRate}
-        isLoading={isLoading}
-        postfix="%"
-        decimals={1}
-      />
-      <Stat
-        title={t("Session Duration")}
-        id="session_duration"
-        value={sessionDuration}
-        isLoading={isLoading}
-        valueFormatter={formatSecondsAsMinutesAndSeconds}
-      />
-      <Stat
-        title={t("Total Time")}
-        id="total_time"
-        value={totalTimeSpent}
-        isLoading={isLoading}
-        valueFormatter={formatTotalTimeSpent}
-        getBucketValue={d => (d.session_duration ?? 0) * (d.sessions ?? 0)}
-      />
-      {showRevenue && (
-        <div className="flex flex-col border-r border-neutral-100 dark:border-neutral-800 last:border-r-0 text-nowrap">
-          <div className="flex flex-col px-3 py-2">
-            <div className="text-xs font-medium text-muted-foreground">{t("Revenue")}</div>
-            <div className="text-2xl font-medium text-green-600 dark:text-green-400">
-              {revenueLoading ? (
-                <Skeleton className="w-[72px] h-9 rounded-md" />
-              ) : (
-                formatRevenue(revenueCents)
-              )}
-            </div>
-            {!stripeConnected && !revenueLoading && (
-              <div className="text-[10px] text-muted-foreground mt-0.5">{t("Connect Stripe in Settings")}</div>
-            )}
-          </div>
-        </div>
+      className={cn(
+        "grid grid-cols-2 md:grid-cols-4 gap-0 items-stretch w-full",
+        showRevenue ? "lg:grid-cols-7" : "lg:grid-cols-4"
       )}
+    >
+        <Stat title={t("Visitors")} id="users" value={visitors} isLoading={isLoading} />
+        {showRevenue && (
+          <>
+            <Stat
+              title={t("Revenue")}
+              id="revenue"
+              value={revenueCents}
+              isLoading={revenueLoading}
+              selectable={false}
+              valueFormatter={formatRevenue}
+              accent="text-green-600 dark:text-green-400"
+              trailing={
+                !stripeConnected && !revenueLoading ? (
+                  <span className="text-[10px] text-muted-foreground font-normal block mt-0.5">
+                    {t("Connect Stripe in Settings")}
+                  </span>
+                ) : undefined
+              }
+            />
+            <Stat
+              title={t("Conversion rate")}
+              id="conversion_rate"
+              value={conversionRate}
+              isLoading={revenueLoading || isLoading}
+              selectable={false}
+              postfix="%"
+              decimals={2}
+            />
+            <Stat
+              title={t("Revenue/visitor")}
+              id="revenue_per_visitor"
+              value={revenuePerVisitorCents}
+              isLoading={revenueLoading || isLoading}
+              selectable={false}
+              valueFormatter={cents => formatRevenuePrecise(cents)}
+            />
+          </>
+        )}
+        <Stat
+          title={t("Bounce rate")}
+          id="bounce_rate"
+          value={bounceRate}
+          isLoading={isLoading}
+          postfix="%"
+          decimals={1}
+        />
+        <Stat
+          title={t("Session time")}
+          id="session_duration"
+          value={sessionDuration}
+          isLoading={isLoading}
+          valueFormatter={formatSecondsAsMinutesAndSeconds}
+        />
+        <Stat
+          title={t("Online")}
+          id="online"
+          value={onlineCount}
+          isLoading={liveLoading}
+          selectable={false}
+          trailing={
+            onlineCount > 0 ? (
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500 shrink-0" />
+            ) : (
+              <span className="inline-block h-2 w-2 rounded-full bg-neutral-400 shrink-0" />
+            )
+          }
+        />
     </div>
   );
 }

@@ -153,6 +153,7 @@ export async function getMetricLite(
           uniqMerge(sessions) AS count
         FROM country_hourly_mv_target
         WHERE site_id = {siteId:Int32}
+          AND country <> ''
           ${timeStatement}
         GROUP BY country
       )

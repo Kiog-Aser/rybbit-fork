@@ -74,6 +74,7 @@ import {
 import {
   connectStripeRevenue,
   disconnectStripeRevenue,
+  syncStripeRevenue,
   getRevenueOverviewHandler,
   getRevenueTimeSeriesHandler,
   getStripeRevenueStatus,
@@ -444,6 +445,7 @@ async function userRoutes(fastify: FastifyInstance) {
 async function revenueRoutes(fastify: FastifyInstance) {
   fastify.get("/sites/:siteId/revenue/status", authSite, getStripeRevenueStatus);
   fastify.post("/sites/:siteId/revenue/stripe/connect", adminSite, connectStripeRevenue);
+  fastify.post("/sites/:siteId/revenue/stripe/sync", adminSite, syncStripeRevenue);
   fastify.delete("/sites/:siteId/revenue/stripe/connect", adminSite, disconnectStripeRevenue);
   fastify.get("/sites/:siteId/revenue/overview", publicSite, getRevenueOverviewHandler);
   fastify.get("/sites/:siteId/revenue/time-series", publicSite, getRevenueTimeSeriesHandler);

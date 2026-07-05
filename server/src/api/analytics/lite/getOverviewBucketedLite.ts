@@ -29,10 +29,10 @@ function buildHourBucketQuery(args: {
   fn: string;
   tz: string;
   overviewTime: string;
-  sessionsTime: string;
+  sessionHourTime: string;
   fill: string;
 }) {
-  const { fn, tz, overviewTime, sessionsTime, fill } = args;
+  const { fn, tz, overviewTime, sessionHourTime, fill } = args;
   return `
     SELECT
       coalesce(p.time, s.time) AS time,
@@ -63,24 +63,32 @@ function buildHourBucketQuery(args: {
     ) p
     FULL JOIN (
       SELECT
-        toDateTime(${fn}(toTimeZone(session_start, ${tz}))) AS time,
-        count() AS sessions,
-        avg(session_pageviews) AS pages_per_session,
-        countIf(session_pageviews = 1) / count() * 100 AS bounce_rate,
-        avg(session_end - session_start) AS session_duration
+        time,
+        sessions,
+        if(sessions > 0, pageviews / sessions, 0) AS pages_per_session,
+        if(sessions > 0, bounced_sessions * 100.0 / sessions, 0) AS bounce_rate,
+        if(sessions > 0, total_session_duration_seconds / sessions, 0) AS session_duration
       FROM (
         SELECT
-          session_id,
-          sum(pageviews) AS session_pageviews,
-          min(start_time) AS session_start,
-          max(end_time) AS session_end
-        FROM sessions_mv_target
-        WHERE site_id = {siteId:Int32}
-          ${sessionsTime}
-        GROUP BY session_id
+          toDateTime(${fn}(toTimeZone(session_hour, ${tz}))) AS time,
+          sum(sessions) AS sessions,
+          sum(pageviews) AS pageviews,
+          sum(bounced_sessions) AS bounced_sessions,
+          sum(total_session_duration_seconds) AS total_session_duration_seconds
+        FROM (
+          SELECT session_hour, sessions, pageviews, bounced_sessions, total_session_duration_seconds
+          FROM session_hourly_mv_target
+          WHERE site_id = {siteId:Int32}
+            ${sessionHourTime}
+          UNION ALL
+          SELECT session_hour, sessions, pageviews, bounced_sessions, total_session_duration_seconds
+          FROM session_hourly_import_target
+          WHERE site_id = {siteId:Int32}
+            ${sessionHourTime}
+        )
+        GROUP BY time
+        ORDER BY time ${fill}
       )
-      GROUP BY time
-      ORDER BY time ${fill}
     ) s USING time
     ORDER BY time
   `;
@@ -231,7 +239,7 @@ export async function getOverviewBucketedLite(
           fn,
           tz,
           overviewTime: getLiteTimeStatement(req.query, "event_hour"),
-          sessionsTime: getLiteTimeStatement(req.query, "start_time"),
+          sessionHourTime: getLiteTimeStatement(req.query, "session_hour"),
           fill,
         });
   }

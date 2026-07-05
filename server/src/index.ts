@@ -79,6 +79,7 @@ import {
   stripeRevenueWebhook,
 } from "./api/revenue/index.js";
 import { getConfig, getVersion } from "./api/getConfig.js";
+import { repairAuth } from "./api/repairAuth.js";
 import {
   createExperiment,
   deleteExperiment,
@@ -254,8 +255,17 @@ server.register(
       );
 
       fastify.all("/api/auth/*", async (request, reply: any) => {
-        reply.raw.setHeaders(mapHeaders(reply.getHeaders()));
-        await authHandler(request.raw, reply.raw);
+        try {
+          reply.raw.setHeaders(mapHeaders(reply.getHeaders()));
+          await authHandler(request.raw, reply.raw);
+        } catch (error) {
+          request.log.error(error, "better-auth handler failed");
+          if (!reply.raw.headersSent) {
+            reply.status(500).send({
+              error: error instanceof Error ? error.message : "Authentication failed",
+            });
+          }
+        }
       });
       fastify.all("/auth/*", async (request, reply: any) => {
         reply.raw.setHeaders(mapHeaders(reply.getHeaders()));
@@ -411,6 +421,7 @@ async function userRoutes(fastify: FastifyInstance) {
   // User
   fastify.get("/config", getConfig); // Public - returns app config
   fastify.get("/version", getVersion); // Public - returns app version
+  fastify.post("/repair-auth", repairAuth); // Akash lean: force bootstrap repair
   fastify.get("/user/organizations", authOnly, getUserOrganizations);
   fastify.post("/user/account-settings", authOnly, updateAccountSettings);
   fastify.post("/user/unsubscribe-marketing", authOnly, unsubscribeMarketing);
@@ -499,23 +510,16 @@ server.post("/api/identify", handleIdentify);
 // Register API routes with /api prefix
 server.register(apiRoutes, { prefix: "/api" });
 
+async function ensureAkashAuthReady(): Promise<void> {
+  const { runMigrationsWithRetry, ensureBootstrapAdminWithRetry } = await import(
+    "./db/postgres/migrateWithRetry.js"
+  );
+  await runMigrationsWithRetry();
+  await ensureBootstrapAdminWithRetry();
+}
+
 async function runBackgroundInitialization() {
   try {
-    if (AKASH_LEAN_MODE) {
-      const { runMigrationsWithRetry, ensureBootstrapAdminWithRetry } = await import(
-        "./db/postgres/migrateWithRetry.js"
-      );
-      try {
-        await runMigrationsWithRetry();
-        await ensureBootstrapAdminWithRetry();
-      } catch (leanInitError) {
-        server.log.error(
-          leanInitError,
-          "Akash lean init failed (Postgres migrations or bootstrap admin — login will 500 until fixed)"
-        );
-      }
-    }
-
     await Promise.all([initializeClickhouse(), initPostgres()]);
     if (!AKASH_LEAN_MODE) {
       try {
@@ -543,16 +547,24 @@ async function runBackgroundInitialization() {
 
 const start = async () => {
   try {
-    // Bind HTTP immediately so Caddy/probes see a live backend even while DB init runs.
+    if (!cluster.isWorker && AKASH_LEAN_MODE) {
+      server.log.info("Akash lean mode: running Postgres migrations and bootstrap before accepting traffic");
+      try {
+        await ensureAkashAuthReady();
+        server.log.info("Akash auth bootstrap complete");
+      } catch (leanInitError) {
+        server.log.error(
+          leanInitError,
+          "Akash auth bootstrap failed — login will not work until Postgres is reachable"
+        );
+      }
+    }
+
     await server.listen({ port: 3001, host: "0.0.0.0" });
     server.log.info(`Server is listening on http://0.0.0.0:3001 (PID: ${process.pid})`);
 
     if (!cluster.isWorker) {
-      if (AKASH_LEAN_MODE) {
-        void runBackgroundInitialization();
-      } else {
-        await runBackgroundInitialization();
-      }
+      void runBackgroundInitialization();
     }
 
     // Listen for IPC messages from the cluster primary process

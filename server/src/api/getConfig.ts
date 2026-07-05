@@ -24,7 +24,7 @@ type AuthReadiness = {
   error: string | null;
 };
 
-async function getAuthReadiness(): Promise<AuthReadiness> {
+export async function getAuthReadiness(): Promise<AuthReadiness> {
   const bootstrapEmail = getBootstrapAdminEmail();
   const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
   if (!bootstrapEmail) {
@@ -125,5 +125,8 @@ export async function getConfig(_: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function getVersion(_: FastifyRequest, reply: FastifyReply) {
-  return reply.send({ version });
+  return reply.send({
+    version,
+    build: process.env.RYBBIT_BUILD_SHA || null,
+  });
 }

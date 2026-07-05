@@ -193,6 +193,7 @@ const pluginList = [
 
 export const auth = betterAuth({
   basePath: "/api/auth",
+  baseURL: process.env.BASE_URL || process.env.BETTER_AUTH_URL,
   appName: "Rybbit",
   secret: SECRET,
   logger: {

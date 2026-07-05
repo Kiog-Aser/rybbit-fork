@@ -41,6 +41,7 @@ jobs:
           echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
           echo "TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
           echo "BASE_URL=${{ inputs.base_url }}" >> "$GITHUB_ENV"
+          echo "BUILD_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
@@ -49,8 +50,11 @@ jobs:
           file: ./server/Dockerfile.akash
           platforms: linux/amd64
           push: true
+          build-args: |
+            RYBBIT_BUILD_SHA=${{ env.BUILD_SHA }}
           tags: |
             ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:${{ env.TAG }}
+            ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:akash-${{ env.BUILD_SHA }}
             ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:akash-v2
 
       - name: Build and push client

@@ -64,7 +64,7 @@ services:
           - service: backend
 
   backend:
-    image: ghcr.io/YOUR_GH_USER/rybbit-backend:akash
+    image: ghcr.io/kiog-aser/rybbit-backend:akash
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
@@ -93,7 +93,7 @@ services:
           - service: client
 
   client:
-    image: ghcr.io/YOUR_GH_USER/rybbit-client:akash
+    image: ghcr.io/kiog-aser/rybbit-client:akash
     env:
       - NODE_ENV=production
       - NEXT_PUBLIC_BACKEND_URL=https://your-domain.com

@@ -1,0 +1,72 @@
+# Lean self-host profile for Akash / low-cost VPS (~1.5GB RAM total).
+# Usage: docker compose -f docker-compose.yml -f docker-compose.akash.yml --env-file .env.akash up -d
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.4.2
+    mem_limit: 512m
+    cpus: 0.5
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/akash-config.xml:/etc/clickhouse-server/config.d/akash-lean.xml:ro
+    configs:
+      - source: clickhouse_network
+        target: /etc/clickhouse-server/config.d/network.xml
+      - source: clickhouse_json
+        target: /etc/clickhouse-server/config.d/enable_json.xml
+      - source: clickhouse_logging
+        target: /etc/clickhouse-server/config.d/logging_rules.xml
+      - source: clickhouse_user_logging
+        target: /etc/clickhouse-server/config.d/user_logging.xml
+
+  postgres:
+    image: postgres:17.4-alpine
+    mem_limit: 256m
+    cpus: 0.25
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=40
+
+  redis:
+    image: redis:7-alpine
+    mem_limit: 128m
+    cpus: 0.1
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-changeme}
+      - --maxmemory
+      - 96mb
+      - --maxmemory-policy
+      - allkeys-lru
+
+  backend:
+    mem_limit: 384m
+    cpus: 0.35
+    environment:
+      - AKASH_LEAN_MODE=true
+      - LITE_DASHBOARD=true
+      - CLUSTER_WORKERS=1
+      - DEPLOYMENT=akash
+      - REVENUE_ATTRIBUTION=true
+
+  client:
+    mem_limit: 256m
+    cpus: 0.25
+    build:
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${BASE_URL}
+        NEXT_PUBLIC_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-true}
+        NEXT_PUBLIC_LITE_DASHBOARD: "true"
+        NEXT_PUBLIC_DEPLOYMENT: akash
+        NEXT_PUBLIC_REVENUE_ATTRIBUTION: "true"
+    environment:
+      - NEXT_PUBLIC_LITE_DASHBOARD=true
+      - NEXT_PUBLIC_DEPLOYMENT=akash
+      - NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
+
+  caddy:
+    profiles: ["with-webserver"]

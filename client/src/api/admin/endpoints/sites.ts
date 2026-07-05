@@ -1,0 +1,165 @@
+import { authedFetch } from "../../utils";
+
+export type SiteResponse = {
+  id: string | null;
+  siteId: number;
+  name: string;
+  type: "web" | "mobile" | null;
+  domain: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  organizationId: string | null;
+  public: boolean;
+  embedEnabled?: boolean;
+  saltUserIds: boolean;
+  blockBots: boolean;
+  isOwner: boolean;
+  // Analytics features
+  sessionReplay?: boolean;
+  webVitals?: boolean;
+  trackErrors?: boolean;
+  trackOutbound?: boolean;
+  trackUrlParams?: boolean;
+  trackInitialPageView?: boolean;
+  trackSpaNavigation?: boolean;
+  trackIp?: boolean;
+  trackButtonClicks?: boolean;
+  trackCopy?: boolean;
+  trackFormInteractions?: boolean;
+  tags?: string[];
+};
+
+export type GetSitesFromOrgResponse = {
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    logo: string | null;
+    createdAt: string;
+    metadata: string | null;
+    stripeCustomerId: string | null;
+    monthlyEventCount: number | null;
+    overMonthlyLimit: boolean | null;
+  } | null;
+  sites: Array<{
+    id: string | null;
+    siteId: number;
+    name: string;
+    type: "web" | "mobile" | null;
+    domain: string;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+    organizationId: string | null;
+    public: boolean | null;
+    saltUserIds: boolean | null;
+    blockBots: boolean;
+    sessionsLast24Hours: number;
+    isOwner: boolean;
+    tags?: string[] | null;
+    teams?: { id: string; name: string }[];
+  }>;
+  subscription: {
+    monthlyEventCount: number;
+    eventLimit: number;
+    overMonthlyLimit: boolean;
+    planName: string;
+    status: string;
+  };
+};
+
+export function fetchSitesFromOrg(organizationId: string) {
+  return authedFetch<GetSitesFromOrgResponse>(`/organizations/${organizationId}/sites`);
+}
+
+export function addSite(
+  domain: string,
+  name: string,
+  organizationId: string,
+  settings?: {
+    type?: "web" | "mobile";
+    isPublic?: boolean;
+    saltUserIds?: boolean;
+    blockBots?: boolean;
+  }
+) {
+  return authedFetch<{ siteId: number }>(`/organizations/${organizationId}/sites`, undefined, {
+    method: "POST",
+    data: {
+      domain,
+      name,
+      type: settings?.type || "web",
+      public: settings?.isPublic || false,
+      saltUserIds: settings?.saltUserIds || false,
+      blockBots: settings?.blockBots === undefined ? true : settings?.blockBots,
+    },
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+export function deleteSite(siteId: number) {
+  return authedFetch(`/sites/${siteId}`, undefined, {
+    method: "DELETE",
+  });
+}
+
+export function moveSite(siteId: number, organizationId: string) {
+  return authedFetch<{ success: boolean; organizationId: string }>(`/sites/${siteId}/move`, undefined, {
+    method: "PUT",
+    data: { organizationId },
+  });
+}
+
+// Consolidated function to update any site configuration
+export function updateSiteConfig(
+  siteId: number,
+  config: {
+    name?: string;
+    type?: "web" | "mobile" | null;
+    domain?: string;
+    public?: boolean;
+    embedEnabled?: boolean;
+    saltUserIds?: boolean;
+    blockBots?: boolean;
+    excludedIPs?: string[];
+    excludedCountries?: string[];
+    excludedPaths?: string[];
+    excludedHostnames?: string[];
+    excludedUserAgents?: string[];
+    sessionReplay?: boolean;
+    webVitals?: boolean;
+    trackErrors?: boolean;
+    trackOutbound?: boolean;
+    trackUrlParams?: boolean;
+    trackInitialPageView?: boolean;
+    trackSpaNavigation?: boolean;
+    trackIp?: boolean;
+    trackButtonClicks?: boolean;
+    trackCopy?: boolean;
+    trackFormInteractions?: boolean;
+    tags?: string[];
+  }
+) {
+  return authedFetch(`/sites/${siteId}/config`, undefined, {
+    method: "PUT",
+    data: config,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+export function fetchSite(siteId: string | number) {
+  return authedFetch<SiteResponse>(`/sites/${siteId}`);
+}
+
+export function fetchSiteHasData(siteId: string) {
+  return authedFetch<{ hasData: boolean }>(`/sites/${siteId}/has-data`);
+}
+
+export function fetchSiteIsPublic(siteId: string | number) {
+  return authedFetch<{ isPublic: boolean }>(`/sites/${siteId}/is-public`);
+}

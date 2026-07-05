@@ -1,0 +1,201 @@
+---
+# Rybbit Akash lean deployment (~1.5GB RAM, target ~$3-5/mo on mainnet)
+# Deploy via https://console.akash.network — import this SDL, set env secrets, fund with ACT.
+#
+# No Docker on your laptop required:
+#   1. Push this repo to GitHub
+#   2. Actions → "Akash Images" → Run workflow (set your public URL)
+#   3. GHCR → Packages → make rybbit-backend & rybbit-client Public
+#   4. Replace YOUR_GH_USER below with your GitHub username (lowercase)
+#
+# Stock ghcr.io/rybbit-io/rybbit-* images work for basic analytics but NOT this fork's revenue/bots unlock.
+
+version: "2.0"
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.4.2
+    env:
+      - CLICKHOUSE_DB=analytics
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=changeme
+    expose:
+      - port: 8123
+        to:
+          - service: backend
+      - port: 9000
+        to:
+          - service: backend
+    params:
+      storage:
+        data:
+          mount: /var/lib/clickhouse
+          readOnly: false
+
+  postgres:
+    image: postgres:17.4-alpine
+    env:
+      - POSTGRES_USER=frog
+      - POSTGRES_PASSWORD=changeme
+      - POSTGRES_DB=analytics
+    expose:
+      - port: 5432
+        to:
+          - service: backend
+    params:
+      storage:
+        data:
+          mount: /var/lib/postgresql/data
+          readOnly: false
+
+  redis:
+    image: redis:7-alpine
+    args:
+      - redis-server
+      - --requirepass
+      - changeme
+      - --maxmemory
+      - 96mb
+      - --maxmemory-policy
+      - allkeys-lru
+    expose:
+      - port: 6379
+        to:
+          - service: backend
+
+  backend:
+    image: ghcr.io/YOUR_GH_USER/rybbit-backend:akash
+    env:
+      - NODE_ENV=production
+      - AKASH_LEAN_MODE=true
+      - LITE_DASHBOARD=true
+      - CLUSTER_WORKERS=1
+      - DEPLOYMENT=akash
+      - REVENUE_ATTRIBUTION=true
+      - CLICKHOUSE_HOST=http://clickhouse:8123
+      - CLICKHOUSE_DB=analytics
+      - CLICKHOUSE_PASSWORD=changeme
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=analytics
+      - POSTGRES_USER=frog
+      - POSTGRES_PASSWORD=changeme
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=changeme
+      - BETTER_AUTH_SECRET=replace-me
+      - BASE_URL=https://your-domain.com
+      - DISABLE_SIGNUP=true
+      - DISABLE_TELEMETRY=true
+    expose:
+      - port: 3001
+        to:
+          - service: client
+
+  client:
+    image: ghcr.io/YOUR_GH_USER/rybbit-client:akash
+    env:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_BACKEND_URL=https://your-domain.com
+      - NEXT_PUBLIC_LITE_DASHBOARD=true
+      - NEXT_PUBLIC_DEPLOYMENT=akash
+      - NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
+      - NEXT_PUBLIC_DISABLE_SIGNUP=true
+    expose:
+      - port: 3002
+        as: 80
+        to:
+          - global: true
+
+profiles:
+  compute:
+    clickhouse:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          - size: 1Gi
+          - name: data
+            size: 4Gi
+            attributes:
+              persistent: true
+              class: beta3
+    postgres:
+      resources:
+        cpu:
+          units: 0.25
+        memory:
+          size: 256Mi
+        storage:
+          - size: 512Mi
+          - name: data
+            size: 1Gi
+            attributes:
+              persistent: true
+              class: beta3
+    redis:
+      resources:
+        cpu:
+          units: 0.1
+        memory:
+          size: 128Mi
+        storage:
+          size: 256Mi
+    backend:
+      resources:
+        cpu:
+          units: 0.35
+        memory:
+          size: 384Mi
+        storage:
+          size: 512Mi
+    client:
+      resources:
+        cpu:
+          units: 0.25
+        memory:
+          size: 256Mi
+        storage:
+          size: 512Mi
+  placement:
+    dcloud:
+      pricing:
+        clickhouse:
+          denom: uact
+          amount: 100
+        postgres:
+          denom: uact
+          amount: 100
+        redis:
+          denom: uact
+          amount: 50
+        backend:
+          denom: uact
+          amount: 100
+        client:
+          denom: uact
+          amount: 100
+
+deployment:
+  clickhouse:
+    dcloud:
+      profile: clickhouse
+      count: 1
+  postgres:
+    dcloud:
+      profile: postgres
+      count: 1
+  redis:
+    dcloud:
+      profile: redis
+      count: 1
+  backend:
+    dcloud:
+      profile: backend
+      count: 1
+  client:
+    dcloud:
+      profile: client
+      count: 1

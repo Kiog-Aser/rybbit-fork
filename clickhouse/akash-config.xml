@@ -1,0 +1,9 @@
+<clickhouse>
+    <!-- Lean profile for Akash / low-memory hosts -->
+    <max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>67108864</mark_cache_size>
+    <uncompressed_cache_size>33554432</uncompressed_cache_size>
+    <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>104857600</max_bytes_to_merge_at_max_space_in_pool>
+    </merge_tree>
+</clickhouse>

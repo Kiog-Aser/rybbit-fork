@@ -49,7 +49,9 @@ jobs:
           file: ./server/Dockerfile.akash
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:${{ env.TAG }}
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:${{ env.TAG }}
+            ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:akash-v2
 
       - name: Build and push client
         uses: docker/build-push-action@v6

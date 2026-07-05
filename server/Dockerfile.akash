@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Lean backend image for Akash (~256-512Mi). No Chromium/Puppeteer.
+# Lean backend image for Akash. No Chromium, no GeoLite MMDBs (saves ~75MB + RAM).
 
 FROM node:20-alpine AS builder
 
@@ -23,8 +23,6 @@ WORKDIR /app
 RUN apk add --no-cache postgresql-client
 
 COPY --from=builder /app/server/package*.json ./
-COPY --from=builder /app/server/GeoLite2-City.mmdb ./GeoLite2-City.mmdb
-COPY --from=builder /app/server/GeoLite2-ASN.mmdb ./GeoLite2-ASN.mmdb
 COPY --from=builder /app/server/dist ./dist
 COPY --from=builder /app/server/node_modules ./node_modules
 COPY --from=builder /app/server/docker-entrypoint.sh /docker-entrypoint.sh
@@ -37,7 +35,8 @@ COPY --from=builder /app/shared ./shared
 RUN chmod +x /docker-entrypoint.sh
 
 ENV NODE_ENV=production
-ENV NODE_OPTIONS=--max-old-space-size=384
+ENV AKASH_LEAN_MODE=true
+ENV NODE_OPTIONS=--max-old-space-size=256
 
 EXPOSE 3001
 

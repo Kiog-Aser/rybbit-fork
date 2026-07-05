@@ -46,6 +46,10 @@ services:
       - maintenance_work_mem=32MB
       - -c
       - max_connections=40
+      - -c
+      - wal_buffers=4MB
+      - -c
+      - max_wal_size=128MB
     env:
       - POSTGRES_USER=frog
       - POSTGRES_PASSWORD=changeme
@@ -76,10 +80,7 @@ services:
           - service: backend
 
   backend:
-    image: ghcr.io/kiog-aser/rybbit-backend:akash
-    command:
-      - node
-      - dist/index.js
+    image: ghcr.io/kiog-aser/rybbit-backend:akash-v2
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
@@ -156,7 +157,7 @@ profiles:
         cpu:
           units: 0.25
         memory:
-          size: 512Mi
+          size: 768Mi
         storage:
           - size: 512Mi
           - name: data
@@ -177,7 +178,7 @@ profiles:
         cpu:
           units: 0.35
         memory:
-          size: 768Mi
+          size: 1Gi
         storage:
           size: 512Mi
     client:

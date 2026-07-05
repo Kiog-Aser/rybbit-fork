@@ -12,7 +12,7 @@ import * as schema from "../db/postgres/schema.js";
 import { invitation, member, memberSiteAccess, sites, user } from "../db/postgres/schema.js";
 import { invalidateSitesAccessCache } from "./auth-utils.js";
 import { getBootstrapAdminEmail, isBootstrapAdminMode } from "./bootstrapAdmin.js";
-import { API_RATE_LIMIT_WINDOW, DISABLE_SIGNUP, IS_CLOUD, STANDARD_API_RATE_LIMIT } from "./const.js";
+import { AKASH_LEAN_MODE, API_RATE_LIMIT_WINDOW, DISABLE_SIGNUP, IS_CLOUD, STANDARD_API_RATE_LIMIT } from "./const.js";
 import {
   addContactToAudience,
   sendChangeEmailVerification,
@@ -42,7 +42,8 @@ const pluginList = [
         }
       : { rateLimit: { maxRequests: 10000, timeWindow: 86400000 } }),
   }),
-  dash(),
+  // Cloud dashboard plugin — skip on lean Akash (saves memory, no external deps).
+  ...(AKASH_LEAN_MODE ? [] : [dash()]),
   organization({
     allowUserToCreateOrganization: true,
     creatorRole: "owner",

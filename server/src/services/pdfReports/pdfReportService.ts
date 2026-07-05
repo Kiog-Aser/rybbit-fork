@@ -1,4 +1,3 @@
-import puppeteer from "puppeteer";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DateTime } from "luxon";
 import { eq } from "drizzle-orm";
@@ -462,6 +461,7 @@ class PdfReportService {
   }
 
   private async htmlToPdf(html: string): Promise<Buffer> {
+    const { default: puppeteer } = await import("puppeteer");
     const browser = await puppeteer.launch({
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,

@@ -2,6 +2,7 @@ import type { Asn } from "@maxmind/geoip2-node";
 import { Reader } from "@maxmind/geoip2-node";
 import { readFile } from "fs/promises";
 import path from "path";
+import { AKASH_LEAN_MODE } from "../../lib/const.js";
 import { logger } from "../../lib/logger/logger.js";
 
 const dbPath = path.join(process.cwd(), "GeoLite2-ASN.mmdb");
@@ -32,8 +33,9 @@ function startLoad(): Promise<void> {
   return loadPromise;
 }
 
-// Kick off loading in the background without blocking server startup.
-void startLoad();
+if (!AKASH_LEAN_MODE) {
+  void startLoad();
+}
 
 export interface AsnInfo {
   asn: number;

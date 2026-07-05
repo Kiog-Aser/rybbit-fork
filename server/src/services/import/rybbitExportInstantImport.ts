@@ -51,8 +51,8 @@ function buildSessionHourlySelect(siteId: number, importId: string, row: RybbitT
       ${pageviews} AS pageviews,
       (
         SELECT uniqStateIf(
-          concat('ry:', '${importId}', ':u:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(n)),
-          n <= ${users}
+          concat('ry:', '${importId}', ':u:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(number)),
+          number < ${users}
         )
         FROM numbers(greatest(${users}, 1))
       ) AS users,
@@ -76,15 +76,15 @@ function buildOverviewHourlySelect(siteId: number, importId: string, row: Rybbit
       ${pageviews} AS events,
       (
         SELECT uniqStateIf(
-          concat('ry:', '${importId}', ':u:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(n)),
-          n <= ${users}
+          concat('ry:', '${importId}', ':u:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(number)),
+          number < ${users}
         )
         FROM numbers(greatest(${users}, 1))
       ) AS users,
       (
         SELECT uniqStateIf(
-          concat('ry:', '${importId}', ':s:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(n)),
-          n <= ${sessions}
+          concat('ry:', '${importId}', ':s:', formatDateTime(toDateTime('${time}'), '%Y%m%d%H'), ':', toString(number)),
+          number < ${sessions}
         )
         FROM numbers(greatest(${sessions}, 1))
       ) AS sessions

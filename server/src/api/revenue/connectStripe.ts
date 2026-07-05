@@ -6,6 +6,7 @@ import {
   connectSiteStripe,
   disconnectSiteStripe,
   getSiteStripeConnection,
+  reconcileStripeRevenue,
   STRIPE_RESTRICTED_KEY_URL,
 } from "../../services/revenue/stripeRevenueService.js";
 
@@ -69,7 +70,7 @@ export async function syncStripeRevenue(
   }
 
   try {
-    const imported = await backfillStripeRevenue(siteId, 90);
+    const imported = await reconcileStripeRevenue(siteId, 90);
     return reply.send({ success: true, imported });
   } catch (error) {
     return reply.status(400).send({

@@ -8,6 +8,7 @@ import {
   extractAttributionFromMetadata,
   getStripeClientForSite,
   recordRevenueEvent,
+  revenuePaymentExists,
 } from "../../services/revenue/stripeRevenueService.js";
 
 async function handlePayment(
@@ -19,6 +20,9 @@ async function handlePayment(
   metadata: Stripe.Metadata | null | undefined,
   customerEmail?: string | null
 ) {
+  if (!paymentId.startsWith("pi_")) return;
+  if (await revenuePaymentExists(siteId, paymentId)) return;
+
   const attribution = extractAttributionFromMetadata(metadata);
   const customerEmailHash = customerEmail
     ? createHash("sha256").update(customerEmail.trim().toLowerCase()).digest("hex")
@@ -72,21 +76,6 @@ export async function stripeRevenueWebhook(
 
   try {
     switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        if (session.payment_status === "paid" && session.amount_total != null) {
-          await handlePayment(
-            siteId,
-            String(session.payment_intent || session.id),
-            session.amount_total,
-            session.currency || "usd",
-            "succeeded",
-            session.metadata,
-            session.customer_details?.email
-          );
-        }
-        break;
-      }
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         await handlePayment(

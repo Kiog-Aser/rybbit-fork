@@ -115,8 +115,8 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
                     const count = data?.imported ?? 0;
                     toast.success(
                       count > 0
-                        ? `Imported ${count} payment${count === 1 ? "" : "s"} from Stripe`
-                        : t("Up to date — no new payments in the last 90 days")
+                        ? `Reconciled ${count} payment${count === 1 ? "" : "s"} from Stripe`
+                        : t("Revenue reconciled — counts match Stripe PaymentIntents")
                     );
                     refetch();
                   },

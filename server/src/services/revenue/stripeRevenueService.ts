@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { DateTime } from "luxon";
 import Stripe from "stripe";
@@ -43,7 +44,7 @@ export async function getSiteStripeConnection(siteId: number) {
   return row ?? null;
 }
 
-async function revenuePaymentExists(siteId: number, stripePaymentId: string): Promise<boolean> {
+export async function revenuePaymentExists(siteId: number, stripePaymentId: string): Promise<boolean> {
   const result = await clickhouse.query({
     query: `
       SELECT 1
@@ -74,6 +75,12 @@ async function importStripePaymentsSince(siteId: number, sinceUnix: number): Pro
     if (await revenuePaymentExists(siteId, paymentIntent.id)) continue;
 
     const attribution = extractAttributionFromMetadata(paymentIntent.metadata);
+    const receiptEmail =
+      typeof paymentIntent.receipt_email === "string" ? paymentIntent.receipt_email : null;
+    const customerEmailHash = receiptEmail
+      ? createHash("sha256").update(receiptEmail.trim().toLowerCase()).digest("hex")
+      : "";
+
     await recordRevenueEvent({
       siteId,
       stripePaymentId: paymentIntent.id,
@@ -81,28 +88,8 @@ async function importStripePaymentsSince(siteId: number, sinceUnix: number): Pro
       currency: paymentIntent.currency,
       status: "succeeded",
       ...attribution,
+      customerEmailHash,
       timestamp: new Date(paymentIntent.created * 1000),
-    });
-    imported++;
-  }
-
-  for await (const charge of stripe.charges.list({
-    created: { gte: sinceUnix },
-    limit: 100,
-  })) {
-    if (charge.status !== "succeeded" || !charge.paid || charge.amount <= 0) continue;
-    const paymentId = String(charge.payment_intent || charge.id);
-    if (await revenuePaymentExists(siteId, paymentId)) continue;
-
-    const attribution = extractAttributionFromMetadata(charge.metadata);
-    await recordRevenueEvent({
-      siteId,
-      stripePaymentId: paymentId,
-      amountCents: charge.amount,
-      currency: charge.currency,
-      status: "succeeded",
-      ...attribution,
-      timestamp: new Date(charge.created * 1000),
     });
     imported++;
   }
@@ -117,6 +104,23 @@ async function importStripePaymentsSince(siteId: number, sinceUnix: number): Pro
 
 export async function backfillStripeRevenue(siteId: number, days = 90): Promise<number> {
   const since = Math.floor(Date.now() / 1000) - days * 86_400;
+  return importStripePaymentsSince(siteId, since);
+}
+
+/** Wipe duplicate-prone rows in the window and re-import canonical PaymentIntents only. */
+export async function reconcileStripeRevenue(siteId: number, days = 90): Promise<number> {
+  const since = Math.floor(Date.now() / 1000) - days * 86_400;
+  const sinceFormatted = DateTime.fromSeconds(since).toUTC().toFormat("yyyy-MM-dd HH:mm:ss");
+
+  await clickhouse.command({
+    query: `
+      ALTER TABLE revenue_events
+      DELETE WHERE site_id = {siteId:UInt16}
+        AND timestamp >= parseDateTimeBestEffort({since:String})
+    `,
+    query_params: { siteId, since: sinceFormatted },
+  });
+
   return importStripePaymentsSince(siteId, since);
 }
 
@@ -242,11 +246,20 @@ export async function getRevenueOverview(siteId: number, startTime: string, endT
         sum(amount_cents) AS revenue_cents,
         count() AS payment_count,
         uniqExact(user_id) AS visitors
-      FROM revenue_events
-      WHERE site_id = {siteId:UInt16}
-        AND timestamp >= parseDateTimeBestEffort({startTime:String})
-        AND timestamp <= parseDateTimeBestEffort({endTime:String})
-        AND status = 'succeeded'
+      FROM (
+        SELECT
+          stripe_payment_id,
+          if(channel = '', 'direct', channel) AS channel,
+          max(amount_cents) AS amount_cents,
+          any(user_id) AS user_id
+        FROM revenue_events
+        WHERE site_id = {siteId:UInt16}
+          AND timestamp >= parseDateTimeBestEffort({startTime:String})
+          AND timestamp <= parseDateTimeBestEffort({endTime:String})
+          AND status = 'succeeded'
+          AND stripe_payment_id LIKE 'pi_%'
+        GROUP BY stripe_payment_id, channel
+      )
       GROUP BY channel
       ORDER BY revenue_cents DESC
       LIMIT 50
@@ -274,14 +287,22 @@ export async function getRevenueTimeSeries(
   const result = await clickhouse.query({
     query: `
       SELECT
-        toDateTime(${bucketFn}(toTimeZone(timestamp, {timeZone:String}))) AS time,
+        time,
         sum(amount_cents) AS revenue_cents,
         count() AS payment_count
-      FROM revenue_events
-      WHERE site_id = {siteId:UInt16}
-        AND timestamp >= parseDateTimeBestEffort({startTime:String})
-        AND timestamp <= parseDateTimeBestEffort({endTime:String})
-        AND status = 'succeeded'
+      FROM (
+        SELECT
+          toDateTime(${bucketFn}(toTimeZone(timestamp, {timeZone:String}))) AS time,
+          stripe_payment_id,
+          max(amount_cents) AS amount_cents
+        FROM revenue_events
+        WHERE site_id = {siteId:UInt16}
+          AND timestamp >= parseDateTimeBestEffort({startTime:String})
+          AND timestamp <= parseDateTimeBestEffort({endTime:String})
+          AND status = 'succeeded'
+          AND stripe_payment_id LIKE 'pi_%'
+        GROUP BY time, stripe_payment_id
+      )
       GROUP BY time
       ORDER BY time
     `,
@@ -297,12 +318,20 @@ export async function getRevenueTotals(siteId: number, startTime: string, endTim
       SELECT
         sum(amount_cents) AS revenue_cents,
         count() AS payment_count,
-        uniqExact(user_id) AS paying_users
-      FROM revenue_events
-      WHERE site_id = {siteId:UInt16}
-        AND timestamp >= parseDateTimeBestEffort({startTime:String})
-        AND timestamp <= parseDateTimeBestEffort({endTime:String})
-        AND status = 'succeeded'
+        uniqExactIf(customer_email_hash, customer_email_hash != '') AS paying_users
+      FROM (
+        SELECT
+          stripe_payment_id,
+          max(amount_cents) AS amount_cents,
+          any(customer_email_hash) AS customer_email_hash
+        FROM revenue_events
+        WHERE site_id = {siteId:UInt16}
+          AND timestamp >= parseDateTimeBestEffort({startTime:String})
+          AND timestamp <= parseDateTimeBestEffort({endTime:String})
+          AND status = 'succeeded'
+          AND stripe_payment_id LIKE 'pi_%'
+        GROUP BY stripe_payment_id
+      )
     `,
     query_params: { siteId, startTime, endTime },
     format: "JSONEachRow",

@@ -75,6 +75,7 @@ import {
   connectStripeRevenue,
   disconnectStripeRevenue,
   getRevenueOverviewHandler,
+  getRevenueTimeSeriesHandler,
   getStripeRevenueStatus,
   stripeRevenueWebhook,
 } from "./api/revenue/index.js";
@@ -329,12 +330,14 @@ async function analyticsRoutes(fastify: FastifyInstance) {
   fastify.post("/sites/:siteId/goals", authSite, createGoal);
   fastify.delete("/sites/:siteId/goals/:goalId", authSite, deleteGoal);
   fastify.put("/sites/:siteId/goals/:goalId", authSite, updateGoal);
-  fastify.get("/sites/:siteId/dashboards", authSite, getDashboards);
-  fastify.get("/sites/:siteId/dashboards/:dashboardId", authSite, getDashboard);
-  fastify.post("/sites/:siteId/dashboards", authSite, createDashboard);
-  fastify.put("/sites/:siteId/dashboards/:dashboardId", authSite, updateDashboard);
-  fastify.delete("/sites/:siteId/dashboards/:dashboardId", authSite, deleteDashboard);
-  fastify.post("/sites/:siteId/dashboards/run-card", authSite, runDashboardCardQuery);
+  if (!AKASH_LEAN_MODE) {
+    fastify.get("/sites/:siteId/dashboards", authSite, getDashboards);
+    fastify.get("/sites/:siteId/dashboards/:dashboardId", authSite, getDashboard);
+    fastify.post("/sites/:siteId/dashboards", authSite, createDashboard);
+    fastify.put("/sites/:siteId/dashboards/:dashboardId", authSite, updateDashboard);
+    fastify.delete("/sites/:siteId/dashboards/:dashboardId", authSite, deleteDashboard);
+    fastify.post("/sites/:siteId/dashboards/run-card", authSite, runDashboardCardQuery);
+  }
   fastify.get("/sites/:siteId/feature-flags", authSite, getFeatureFlags);
   fastify.post("/sites/:siteId/feature-flags", adminSite, createFeatureFlag);
   fastify.put("/sites/:siteId/feature-flags/:flagId", adminSite, updateFeatureFlag);
@@ -350,8 +353,10 @@ async function analyticsRoutes(fastify: FastifyInstance) {
   fastify.get("/sites/:siteId/events/properties", publicSite, getEventProperties);
   fastify.get("/sites/:siteId/events/outbound", publicSite, getOutboundLinks);
   fastify.get("/org-event-count/:organizationId", orgMember, getOrgEventCount);
-  fastify.post("/organizations/:organizationId/analytics/query", orgMember, runCustomQuery);
-  fastify.post("/organizations/:organizationId/analytics/query/generate", orgMember, generateCustomQuery);
+  if (!AKASH_LEAN_MODE) {
+    fastify.post("/organizations/:organizationId/analytics/query", orgMember, runCustomQuery);
+    fastify.post("/organizations/:organizationId/analytics/query/generate", orgMember, generateCustomQuery);
+  }
   fastify.get("/sites/:siteId/performance/overview", publicSite, getPerformanceOverview);
   fastify.get("/sites/:siteId/performance/time-series", publicSite, getPerformanceTimeSeries);
   fastify.get("/sites/:siteId/performance/by-dimension", publicSite, getPerformanceByDimension);
@@ -435,6 +440,7 @@ async function revenueRoutes(fastify: FastifyInstance) {
   fastify.post("/sites/:siteId/revenue/stripe/connect", adminSite, connectStripeRevenue);
   fastify.delete("/sites/:siteId/revenue/stripe/connect", adminSite, disconnectStripeRevenue);
   fastify.get("/sites/:siteId/revenue/overview", publicSite, getRevenueOverviewHandler);
+  fastify.get("/sites/:siteId/revenue/time-series", publicSite, getRevenueTimeSeriesHandler);
   fastify.post("/sites/:siteId/revenue/stripe/webhook", { config: { rawBody: true } }, stripeRevenueWebhook);
 }
 
@@ -479,7 +485,9 @@ async function stripeAdminRoutes(fastify: FastifyInstance) {
 // Main API routes plugin - registers all domain plugins
 async function apiRoutes(fastify: FastifyInstance) {
   await fastify.register(analyticsRoutes);
-  await fastify.register(sessionReplayRoutes);
+  if (!AKASH_LEAN_MODE) {
+    await fastify.register(sessionReplayRoutes);
+  }
   await fastify.register(sitesRoutes);
   await fastify.register(organizationsRoutes);
   await fastify.register(teamsRoutes);

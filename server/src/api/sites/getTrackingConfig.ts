@@ -1,4 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
+import { AKASH_LEAN_MODE } from "../../lib/const.js";
 import { siteConfig } from "../../lib/siteConfig.js";
 import { usageService } from "../../services/usageService.js";
 
@@ -14,7 +15,7 @@ export async function getTrackingConfig(request: FastifyRequest<{ Params: { site
     // Report replay as off when the plan doesn't include it so the tracking script
     // never loads the recorder (replay payloads would be dropped at ingest anyway)
     const sessionReplay =
-      config.type === "mobile"
+      AKASH_LEAN_MODE || config.type === "mobile"
         ? false
         : (config.sessionReplay && !usageService.isSiteWithoutReplay(config.siteId)) || false;
 

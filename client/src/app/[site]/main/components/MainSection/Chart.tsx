@@ -33,11 +33,13 @@ export function Chart({
   previousData,
   max,
   chartXMax,
+  revenueTimeSeries,
 }: {
   data: APIResponse<GetOverviewBucketedResponse> | undefined;
   previousData: APIResponse<GetOverviewBucketedResponse> | undefined;
   max: number;
   chartXMax: Date | undefined;
+  revenueTimeSeries?: Array<{ time: string; revenue_cents: number }>;
 }) {
   const { time, bucket, selectedStat, previousTime } = useStore();
   const timezone = getTimezone();
@@ -120,6 +122,47 @@ export function Chart({
     };
   }, [data, previousData, selectedStat, time, previousTime, bucket, timezone, chartXMax, isExactRange]);
 
+  const { revenueBars, revenueMax, revenueByMs } = useMemo(() => {
+    if (!revenueTimeSeries?.length) {
+      return { revenueBars: undefined, revenueMax: 0, revenueByMs: new Map<number, number>() };
+    }
+
+    const now = DateTime.now();
+    const lowerBoundMs = chartMin?.getTime();
+    const upperBoundMs = chartMax?.getTime() ?? now.toMillis();
+    const bars: Array<TimeSeriesChartPoint & { currentTime: DateTime }> = [];
+    const byMs = new Map<number, number>();
+
+    revenueTimeSeries.forEach(row => {
+      const ts = DateTime.fromSQL(row.time, { zone: timezone }).toUTC();
+      if (ts > now) return;
+      const tsMs = ts.toMillis();
+      if (lowerBoundMs !== undefined && tsMs < lowerBoundMs) return;
+      if (tsMs > upperBoundMs) return;
+      const dollars = row.revenue_cents / 100;
+      bars.push({ x: ts.toJSDate(), y: dollars, currentTime: ts });
+      byMs.set(tsMs, row.revenue_cents);
+    });
+
+    const revMax = Math.max(...bars.map(b => b.y), 1);
+    return { revenueBars: bars, revenueMax: revMax, revenueByMs: byMs };
+  }, [revenueTimeSeries, chartMin, chartMax, timezone]);
+
+  const findRevenueCents = (point: Point) => {
+    const targetMs = point.currentTime.toMillis();
+    if (revenueByMs.has(targetMs)) return revenueByMs.get(targetMs)!;
+    let closest: number | undefined;
+    let closestDelta = Infinity;
+    revenueByMs.forEach((cents, ms) => {
+      const delta = Math.abs(ms - targetMs);
+      if (delta < closestDelta) {
+        closestDelta = delta;
+        closest = cents;
+      }
+    });
+    return closestDelta <= 45 * 60 * 1000 ? closest : undefined;
+  };
+
   return (
     <TimeSeriesChart
       current={current}
@@ -128,7 +171,13 @@ export function Chart({
       chartMin={chartMin}
       chartMax={chartMax}
       displayDashed={displayDashed}
+      overlayBars={
+        revenueBars?.length
+          ? { data: revenueBars, max: revenueMax, color: "hsl(var(--green-500))" }
+          : undefined
+      }
       renderTooltip={({ point, previousPoint, bucket }) => {
+        const revenueCents = findRevenueCents(point as Point);
         const hoverCurrentY = point.y;
         const hoverPreviousY = previousPoint?.y ?? 0;
         const hoverDiff = hoverCurrentY - hoverPreviousY;
@@ -163,6 +212,15 @@ export function Chart({
                     <span className="truncate">{formatChartDateTime(previousPoint.originalTime, bucket)}</span>
                   </div>
                   <div className="shrink-0">{formatTooltipValue(hoverPreviousY, selectedStat)}</div>
+                </div>
+              )}
+              {revenueCents !== undefined && revenueCents > 0 && (
+                <div className="flex justify-between gap-3 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-1 h-3 rounded-[3px] bg-green-500 shrink-0" />
+                    <span className="truncate">Revenue</span>
+                  </div>
+                  <div className="shrink-0">${(revenueCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
               )}
             </div>

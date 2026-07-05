@@ -1,7 +1,9 @@
 import { FilterParameter } from "@rybbit/shared";
 import Map from "ol/Map";
+import TileLayer from "ol/layer/Tile";
 import { unByKey as dispose } from "ol/Observable";
 import View from "ol/View";
+import XYZ from "ol/source/XYZ";
 import { fromLonLat } from "ol/proj";
 import { useEffect, useRef } from "react";
 import { addFilter } from "../../../../../../lib/store";
@@ -51,8 +53,17 @@ export function useMapInstance({
   useEffect(() => {
     if (!mapRef.current) return;
 
+    const baseLayer = new TileLayer({
+      source: new XYZ({
+        url: "https://{a-d}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+        attributions:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      }),
+    });
+
     const map = new Map({
       target: mapRef.current,
+      layers: [baseLayer],
       view: new View({
         center: fromLonLat([3, 40]),
         zoom: zoom,

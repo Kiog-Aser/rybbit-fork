@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Clock, Globe2, HouseIcon, Radio } from "lucide-react";
 import { useExtracted } from "next-intl";
+import { useConfigs } from "../../../../lib/configs";
 import { useGlobeStore } from "../globeStore";
 
 export type MapView = "countries" | "subdivisions" | "coordinates" | "timeline";
@@ -30,16 +31,20 @@ function TabButton({ active, onClick, icon, label }: TabButtonProps) {
 
 export default function MapViewSelector() {
   const { mapView, setMapView, mapMode, setMapMode } = useGlobeStore();
+  const { configs } = useConfigs();
   const t = useExtracted();
+  const canUse3D = Boolean(configs?.mapboxToken);
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto w-full">
-      <button
-        className="text-xs font-medium rounded-lg bg-neutral-900/70 text-neutral-200 backdrop-blur-sm p-1.5 border border-neutral-800/50 hover:bg-neutral-800 hover:text-white transition-all"
-        onClick={() => setMapMode(mapMode === "2D" ? "3D" : "2D")}
-      >
-        {mapMode === "2D" ? "2D" : "3D"}
-      </button>
+      {canUse3D && (
+        <button
+          className="text-xs font-medium rounded-lg bg-neutral-900/70 text-neutral-200 backdrop-blur-sm p-1.5 border border-neutral-800/50 hover:bg-neutral-800 hover:text-white transition-all"
+          onClick={() => setMapMode(mapMode === "2D" ? "3D" : "2D")}
+        >
+          {mapMode === "2D" ? "2D" : "3D"}
+        </button>
+      )}
       <div className="flex items-center gap-0.5 rounded-lg bg-neutral-900/50 backdrop-blur-sm p-0.5 border border-neutral-800/50">
         <TabButton
           active={mapView === "timeline"}

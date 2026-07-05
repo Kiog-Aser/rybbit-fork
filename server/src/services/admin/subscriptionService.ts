@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import Stripe from "stripe";
 import { db } from "../../db/postgres/postgres.js";
-import { APPSUMO_TIER_LIMITS, DEFAULT_EVENT_LIMIT, getStripePrices } from "../../lib/const.js";
+import { APPSUMO_TIER_LIMITS, DEFAULT_EVENT_LIMIT, getStripePrices, IS_CLOUD } from "../../lib/const.js";
 import { stripe } from "../../lib/stripe.js";
 import { getAllStripeSubscriptionsByCustomer } from "../../lib/subscriptionUtils.js";
 
@@ -215,8 +215,15 @@ export async function getOrganizationSubscriptions(
       }
 
       orgSubscriptionMap.set(org.id, subscriptionData);
+    } else if (!IS_CLOUD) {
+      orgSubscriptionMap.set(org.id, {
+        id: "",
+        planName: "self-hosted",
+        status: "active",
+        eventLimit: 10_000_000,
+        currentPeriodEnd: nextMonthStart,
+      });
     } else {
-      // Free plan with all required fields
       orgSubscriptionMap.set(org.id, {
         id: "",
         planName: "free",

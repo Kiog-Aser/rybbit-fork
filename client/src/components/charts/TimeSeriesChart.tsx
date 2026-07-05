@@ -75,6 +75,12 @@ type TimeSeriesChartProps<
   yTickFormat?: (value: number) => string;
   /** Disable click-drag range zoom (e.g. for embedded dashboard cards). */
   disableDragZoom?: boolean;
+  /** Semi-transparent bars on a secondary scale (e.g. revenue behind traffic line). */
+  overlayBars?: {
+    data: TimeSeriesChartPoint[];
+    max: number;
+    color?: string;
+  };
   renderTooltip: (context: TimeSeriesTooltipContext<CurrentPoint, PreviousPoint>) => ReactNode;
 };
 
@@ -192,6 +198,7 @@ export function TimeSeriesChart<
   tooltipWidth = 220,
   yTickFormat = formatter,
   disableDragZoom = false,
+  overlayBars,
   renderTooltip,
 }: TimeSeriesChartProps<CurrentPoint, PreviousPoint>) {
   const { time, bucket, setTime, setBucket } = useStore();
@@ -276,6 +283,21 @@ export function TimeSeriesChart<
       .domain([0, Math.max(max, 1)])
       .range([plotBottom, plotTop]);
   }, [max, plotBottom, plotTop]);
+
+  const overlayYScale = useMemo(() => {
+    if (!overlayBars) return null;
+    return d3
+      .scaleLinear()
+      .domain([0, Math.max(overlayBars.max, 1)])
+      .range([plotBottom, plotTop]);
+  }, [overlayBars, plotBottom, plotTop]);
+
+  const overlayBarWidth = useMemo(() => {
+    if (!overlayBars?.data.length || !chartMin || !chartMax) return 8;
+    const span = chartMax.getTime() - chartMin.getTime();
+    const avgGap = span / Math.max(overlayBars.data.length, 1);
+    return Math.max(4, Math.min(24, avgGap * 0.35));
+  }, [overlayBars, chartMin, chartMax]);
 
   const maxTicks = Math.max(1, Math.round(W / 40));
   const xTickCount =
@@ -709,6 +731,26 @@ export function TimeSeriesChart<
                 strokeDasharray="3 6"
               />
             )}
+
+            {overlayBars &&
+              overlayYScale &&
+              overlayBars.data.map((point, index) => {
+                const x = xScale(point.x);
+                const barHeight = plotBottom - overlayYScale(point.y);
+                if (barHeight <= 0) return null;
+                return (
+                  <rect
+                    key={`rev-bar-${index}`}
+                    x={x - overlayBarWidth / 2}
+                    y={overlayYScale(point.y)}
+                    width={overlayBarWidth}
+                    height={barHeight}
+                    fill={overlayBars.color ?? "hsl(var(--green-500))"}
+                    opacity={0.35}
+                    rx={2}
+                  />
+                );
+              })}
           </g>
 
           <line x1={plotLeft} x2={plotRight} y1={plotBottom} y2={plotBottom} stroke={gridColor} strokeWidth={1} />

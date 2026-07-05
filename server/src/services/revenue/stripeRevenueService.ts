@@ -5,8 +5,25 @@ import { db } from "../../db/postgres/postgres.js";
 import { siteStripeConnections } from "../../db/postgres/schema.js";
 import { decryptSecret, encryptSecret } from "../../lib/revenueEncryption.js";
 
-export const STRIPE_RESTRICTED_KEY_URL =
-  "https://dashboard.stripe.com/apikeys/create?name=Rybbit+Revenue&permissions[charges]=read&permissions[payment_intents]=read&permissions[checkout.sessions]=read&permissions[customers]=read&permissions[invoices]=read&permissions[subscriptions]=read";
+// Stripe's restricted-key creator uses rak_* permission slugs (same flow as DataFast).
+const STRIPE_RAK_PERMISSIONS = [
+  "rak_charge_read",
+  "rak_subscription_read",
+  "rak_customer_read",
+  "rak_payment_intent_read",
+  "rak_checkout_session_read",
+  "rak_invoice_read",
+  "rak_webhook_write",
+  "rak_product_read",
+] as const;
+
+const stripeRestrictedKeyParams = new URLSearchParams();
+stripeRestrictedKeyParams.set("name", "Rybbit Revenue");
+for (const permission of STRIPE_RAK_PERMISSIONS) {
+  stripeRestrictedKeyParams.append("permissions[]", permission);
+}
+
+export const STRIPE_RESTRICTED_KEY_URL = `https://dashboard.stripe.com/apikeys/create?${stripeRestrictedKeyParams.toString()}`;
 
 export interface RevenueOverviewRow {
   channel: string;
@@ -26,7 +43,8 @@ export async function connectSiteStripe(siteId: number, restrictedKey: string, w
   }
 
   const stripe = new Stripe(restrictedKey, { typescript: true, maxNetworkRetries: 2 });
-  await stripe.balance.retrieve();
+  // Validate with charge read — restricted keys do not include balance access.
+  await stripe.charges.list({ limit: 1 });
 
   const encrypted = encryptSecret(restrictedKey);
   await db
@@ -109,6 +127,39 @@ export async function getRevenueOverview(siteId: number, startTime: string, endT
   });
   const rows = (await result.json()) as RevenueOverviewRow[];
   return rows;
+}
+
+export type RevenueTimeSeriesRow = {
+  time: string;
+  revenue_cents: number;
+  payment_count: number;
+};
+
+export async function getRevenueTimeSeries(
+  siteId: number,
+  startTime: string,
+  endTime: string,
+  bucketFn: string,
+  timeZone: string
+): Promise<RevenueTimeSeriesRow[]> {
+  const result = await clickhouse.query({
+    query: `
+      SELECT
+        toDateTime(${bucketFn}(toTimeZone(timestamp, {timeZone:String}))) AS time,
+        sum(amount_cents) AS revenue_cents,
+        count() AS payment_count
+      FROM revenue_events
+      WHERE site_id = {siteId:UInt16}
+        AND timestamp >= parseDateTimeBestEffort({startTime:String})
+        AND timestamp <= parseDateTimeBestEffort({endTime:String})
+        AND status = 'succeeded'
+      GROUP BY time
+      ORDER BY time
+    `,
+    query_params: { siteId, startTime, endTime, timeZone },
+    format: "JSONEachRow",
+  });
+  return (await result.json()) as RevenueTimeSeriesRow[];
 }
 
 export async function getRevenueTotals(siteId: number, startTime: string, endTime: string) {

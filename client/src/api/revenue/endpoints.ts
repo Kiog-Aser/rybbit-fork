@@ -49,3 +49,23 @@ export async function fetchRevenueOverview(siteId: string | number, startTime: s
   );
   return response.data;
 }
+
+export type RevenueTimeSeriesPoint = {
+  time: string;
+  revenue_cents: number;
+  payment_count: number;
+};
+
+export async function fetchRevenueTimeSeries(
+  siteId: string | number,
+  startTime: string,
+  endTime: string,
+  bucket: string,
+  timeZone: string
+) {
+  const params = new URLSearchParams({ startTime, endTime, bucket, time_zone: timeZone });
+  const response = await authedFetch<{ data: RevenueTimeSeriesPoint[] }>(
+    `/sites/${siteId}/revenue/time-series?${params.toString()}`
+  );
+  return response.data;
+}

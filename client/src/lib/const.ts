@@ -9,6 +9,8 @@ export const IS_CLOUD = process.env.NEXT_PUBLIC_CLOUD === "true";
 export const DEPLOYMENT = process.env.NEXT_PUBLIC_DEPLOYMENT;
 export const LITE_DASHBOARD = process.env.NEXT_PUBLIC_LITE_DASHBOARD === "true";
 export const REVENUE_ATTRIBUTION = process.env.NEXT_PUBLIC_REVENUE_ATTRIBUTION === "true";
+/** Self-hosted Akash lean profile: hide heavy cloud-only UI and prefer MV-backed analytics. */
+export const AKASH_LEAN = !IS_CLOUD && LITE_DASHBOARD;
 
 // Time constants
 export const MINUTES_IN_24_HOURS = 24 * 60; // 1440 minutes

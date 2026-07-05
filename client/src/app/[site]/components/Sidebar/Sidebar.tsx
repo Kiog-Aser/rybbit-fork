@@ -28,7 +28,7 @@ import { Suspense } from "react";
 import { useGetSite } from "../../../../api/admin/hooks/useSites";
 import { Sidebar as SidebarComponents } from "../../../../components/sidebar/Sidebar";
 import { SiteSettings } from "../../../../components/SiteSettings/SiteSettings";
-import { DEMO_HOSTNAME, IS_CLOUD, REVENUE_ATTRIBUTION } from "../../../../lib/const";
+import { AKASH_LEAN, IS_CLOUD, REVENUE_ATTRIBUTION } from "../../../../lib/const";
 import { getSiteRouteContext } from "../../../../lib/siteRoute";
 import { useEmbedPageOptions } from "../../utils";
 import { SiteSelector } from "./SiteSelector";
@@ -83,12 +83,14 @@ function SidebarContent() {
           href={getTabPath("main")}
           icon={<LayoutDashboard className="w-4 h-4" />}
         />
-        <SidebarComponents.Item
-          label={t("Globe")}
-          active={isActiveTab("globe")}
-          href={getTabPath("globe")}
-          icon={<Globe2 className="w-4 h-4" />}
-        />
+        {!AKASH_LEAN && (
+          <SidebarComponents.Item
+            label={t("Globe")}
+            active={isActiveTab("globe")}
+            href={getTabPath("globe")}
+            icon={<Globe2 className="w-4 h-4" />}
+          />
+        )}
         {IS_CLOUD && (
           <SidebarComponents.Item
             label={t("Pages")}
@@ -127,15 +129,17 @@ function SidebarContent() {
           href={getTabPath("goals")}
           icon={<Target className="w-4 h-4" />}
         />
-        <div className="hidden md:block">
-          <SidebarComponents.Item
-            label={t("API Playground")}
-            active={isActiveTab("api-playground")}
-            href={getTabPath("api-playground")}
-            icon={<Code className="w-4 h-4" />}
-          />
-        </div>
-        {!IS_CLOUD && (
+        {!AKASH_LEAN && (
+          <div className="hidden md:block">
+            <SidebarComponents.Item
+              label={t("API Playground")}
+              active={isActiveTab("api-playground")}
+              href={getTabPath("api-playground")}
+              icon={<Code className="w-4 h-4" />}
+            />
+          </div>
+        )}
+        {!IS_CLOUD && !AKASH_LEAN && (
           <>
             <SidebarComponents.Item
               label={t("Query")}
@@ -152,16 +156,18 @@ function SidebarContent() {
           </>
         )}
         <SidebarComponents.SectionHeader>{t("Product Analytics")}</SidebarComponents.SectionHeader>
-        <div className="hidden md:block">
-          {!isMobileSite && !subscription?.planName?.startsWith("appsumo") && !isSubscriptionLoading && (
-            <SidebarComponents.Item
-              label={t("Replay")}
-              active={isActiveTab("replay")}
-              href={getTabPath("replay")}
-              icon={<Video className="w-4 h-4" />}
-            />
-          )}
-        </div>
+        {!AKASH_LEAN && (
+          <div className="hidden md:block">
+            {!isMobileSite && !subscription?.planName?.startsWith("appsumo") && !isSubscriptionLoading && (
+              <SidebarComponents.Item
+                label={t("Replay")}
+                active={isActiveTab("replay")}
+                href={getTabPath("replay")}
+                icon={<Video className="w-4 h-4" />}
+              />
+            )}
+          </div>
+        )}
         {/* {!privateKey && (
           <SidebarComponents.Item
             label={t("Feature Flags")}

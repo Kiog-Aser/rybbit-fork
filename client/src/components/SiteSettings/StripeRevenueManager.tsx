@@ -73,7 +73,9 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
       <div>
         <h4 className="text-sm font-semibold text-foreground">{t("Stripe Revenue")}</h4>
         <p className="text-xs text-muted-foreground">
-          {t("Connect a read-only Stripe restricted key to attribute revenue to traffic sources.")}
+          {t(
+            "Create a restricted Stripe key with the preset permissions, paste it below, and revenue will attribute to your traffic sources."
+          )}
         </p>
       </div>
 
@@ -107,10 +109,13 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
         <div className="space-y-3">
           <Button variant="outline" asChild>
             <a href={status?.restrictedKeyUrl} target="_blank" rel="noopener noreferrer">
-              {t("Create restricted Stripe key")}
+              {t("Create Stripe key in Dashboard")}
               <ExternalLink className="w-3 h-3 ml-2" />
             </a>
           </Button>
+          <p className="text-xs text-muted-foreground">
+            {t("Stripe opens with the correct read permissions pre-selected. Copy the key and paste it here.")}
+          </p>
 
           <div className="space-y-2">
             <Label htmlFor="stripe-restricted-key">{t("Restricted API key")}</Label>

@@ -8,6 +8,8 @@ import { RybbitTextLogo } from "../../../../../components/RybbitLogo";
 import { useWhiteLabel } from "../../../../../hooks/useIsWhiteLabel";
 import { authClient } from "../../../../../lib/auth";
 import { useStore } from "../../../../../lib/store";
+import { useRevenueTimeSeries } from "../../../../../api/revenue/hooks";
+import { REVENUE_ATTRIBUTION } from "../../../../../lib/const";
 import { Chart } from "./Chart";
 import { OverviewLite } from "./OverviewLite";
 
@@ -33,6 +35,7 @@ export function MainSectionLite() {
   };
 
   const { data, isFetching } = useGetOverviewBucketed({ site, bucket, lite: true });
+  const { data: revenueSeries } = useRevenueTimeSeries();
 
   const max = Math.max(...(data?.data?.map((d: any) => d[selectedStat]) ?? []));
 
@@ -58,7 +61,13 @@ export function MainSectionLite() {
             <BucketSelection />
           </div>
           <div className="h-[200px] md:h-[290px] relative">
-            <Chart data={data} max={max} previousData={undefined} chartXMax={undefined} />
+            <Chart
+              data={data}
+              max={max}
+              previousData={undefined}
+              chartXMax={undefined}
+              revenueTimeSeries={REVENUE_ATTRIBUTION ? revenueSeries : undefined}
+            />
           </div>
         </CardContent>
       </Card>

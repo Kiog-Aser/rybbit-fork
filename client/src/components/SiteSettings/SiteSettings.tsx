@@ -32,7 +32,7 @@ import { useGetSite } from "../../api/admin/hooks/useSites";
 import { useUserOrganizations } from "../../api/admin/hooks/useOrganizations";
 import { useGetSitesFromOrg } from "../../api/admin/hooks/useSites";
 import { SiteResponse, updateSiteConfig } from "../../api/admin/endpoints";
-import { IS_CLOUD } from "../../lib/const";
+import { IS_CLOUD, REVENUE_ATTRIBUTION } from "../../lib/const";
 
 export function SiteSettings({ siteId, trigger }: { siteId: number; trigger?: React.ReactNode }) {
   const { data: siteMetadata, isLoading, error } = useGetSite(siteId);
@@ -101,7 +101,7 @@ function SiteSettingsInner({ siteMetadata, trigger }: { siteMetadata: SiteRespon
     { key: "general", label: t("General"), icon: Settings },
     { key: "tracking", label: t("Tracking"), icon: SlidersHorizontal },
     { key: "exclusions", label: t("Exclusions"), icon: Ban },
-    { key: "integrations", label: t("Integrations"), icon: Plug, hidden: !IS_CLOUD },
+    { key: "integrations", label: t("Integrations"), icon: Plug, hidden: !IS_CLOUD && !REVENUE_ATTRIBUTION },
     { key: "script", label: isMobileSite ? t("React Native SDK") : t("Tracking Script"), icon: Code },
     { key: "widget-embeds", label: t("Widget Embeds"), icon: LayoutTemplate },
     { key: "dashboard-embed", label: t("Dashboard Embed"), icon: LayoutDashboard },
@@ -177,7 +177,9 @@ function SiteSettingsInner({ siteMetadata, trigger }: { siteMetadata: SiteRespon
               )}
               {activeTab === "tracking" && <TrackingTab siteMetadata={currentSiteMetadata} disabled={disabled} />}
               {activeTab === "exclusions" && <ExclusionsTab siteId={siteMetadata.siteId} disabled={disabled} />}
-              {activeTab === "integrations" && IS_CLOUD && <IntegrationsTab disabled={disabled} />}
+              {activeTab === "integrations" && (IS_CLOUD || REVENUE_ATTRIBUTION) && (
+                <IntegrationsTab disabled={disabled} />
+              )}
               {activeTab === "script" && (
                 <ScriptBuilder
                   siteId={siteMetadata.id ?? String(siteMetadata.siteId)}

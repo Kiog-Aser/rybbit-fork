@@ -33,7 +33,7 @@ services:
           readOnly: false
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17.4-alpine
     args:
       - postgres
       - -c
@@ -155,11 +155,11 @@ profiles:
         cpu:
           units: 0.25
         memory:
-          size: 1Gi
+          size: 768Mi
         storage:
-          - size: 1Gi
+          - size: 512Mi
           - name: data
-            size: 2Gi
+            size: 1Gi
             attributes:
               persistent: true
               class: beta3

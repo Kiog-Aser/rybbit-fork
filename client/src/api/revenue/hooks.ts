@@ -6,9 +6,11 @@ import {
   connectStripeRevenue,
   disconnectStripeRevenue,
   fetchRevenueOverview,
+  fetchRevenueTimeSeries,
   fetchStripeRevenueStatus,
 } from "./endpoints";
-import { useStore } from "../../lib/store";
+import { useStore, getTimezone } from "../../lib/store";
+import { REVENUE_ATTRIBUTION } from "../../lib/const";
 
 function revenueTimeRange(params: CommonApiParams): { startTime: string; endTime: string } {
   if (params.startDateTime && params.endDateTime) {
@@ -67,6 +69,19 @@ export function useRevenueOverview() {
   return useQuery({
     queryKey: ["revenue-overview", site, time],
     queryFn: () => fetchRevenueOverview(site!, startTime, endTime),
-    enabled: Boolean(site),
+    enabled: Boolean(site) && REVENUE_ATTRIBUTION,
+  });
+}
+
+export function useRevenueTimeSeries() {
+  const { site, time, bucket } = useStore();
+  const params = buildApiParams(time, { filters: undefined });
+  const { startTime, endTime } = revenueTimeRange(params);
+  const timeZone = getTimezone();
+
+  return useQuery({
+    queryKey: ["revenue-time-series", site, time, bucket],
+    queryFn: () => fetchRevenueTimeSeries(site!, startTime, endTime, bucket, timeZone),
+    enabled: Boolean(site) && REVENUE_ATTRIBUTION,
   });
 }

@@ -67,6 +67,10 @@ export async function ensureBootstrapAdmin(): Promise<void> {
       password: hashedPassword,
       userId: existing.user.id,
     });
+  } else {
+    // Always sync password from env so redeploys / SDL password changes take effect.
+    // Stale or malformed hashes cause sign-in/email to 500 (scrypt verify throws).
+    await ctx.internalAdapter.updatePassword(existing.user.id, hashedPassword);
   }
 
   logger.info({ email }, "Bootstrap admin account ready");

@@ -12,7 +12,14 @@ import * as schema from "../db/postgres/schema.js";
 import { invitation, member, memberSiteAccess, sites, user } from "../db/postgres/schema.js";
 import { invalidateSitesAccessCache } from "./auth-utils.js";
 import { getBootstrapAdminEmail, isBootstrapAdminMode } from "./bootstrapAdmin.js";
-import { AKASH_LEAN_MODE, API_RATE_LIMIT_WINDOW, DISABLE_SIGNUP, IS_CLOUD, STANDARD_API_RATE_LIMIT } from "./const.js";
+import {
+  AKASH_LEAN_MODE,
+  API_RATE_LIMIT_WINDOW,
+  DISABLE_SIGNUP,
+  IS_CLOUD,
+  SECRET,
+  STANDARD_API_RATE_LIMIT,
+} from "./const.js";
 import {
   addContactToAudience,
   sendChangeEmailVerification,
@@ -186,6 +193,7 @@ const pluginList = [
 export const auth = betterAuth({
   basePath: "/api/auth",
   appName: "Rybbit",
+  secret: SECRET,
   logger: {
     log: (level, message, ...args) => {
       // Route better-auth's internal logs (e.g. API key rate-limit errors)

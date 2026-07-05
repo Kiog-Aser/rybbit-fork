@@ -10,6 +10,10 @@ export type GetBotOverviewResponse = Record<BotLayerKey, number> & {
   bot_requests: number;
   total_events: number;
   bot_percentage: number;
+  category_all: number;
+  category_ai_answers: number;
+  category_indexing: number;
+  category_training: number;
 };
 
 export type BotTimeSeriesPoint = {

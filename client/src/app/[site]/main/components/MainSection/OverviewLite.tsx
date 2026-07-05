@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useGetLiveUserCount } from "../../../../../api/analytics/hooks/useGetLiveUserCount";
 import { useGetOverview } from "../../../../../api/analytics/hooks/useGetOverview";
 import { useGetOverviewBucketed } from "../../../../../api/analytics/hooks/useGetOverviewBucketed";
+import type { GetOverviewBucketedResponse } from "../../../../../api/analytics/endpoints";
 import { useRevenueOverview, useStripeRevenueStatus } from "../../../../../api/revenue/hooks";
 import { REVENUE_ATTRIBUTION } from "../../../../../lib/const";
 import { StatType, useStore } from "../../../../../lib/store";
@@ -39,7 +40,7 @@ const Stat = ({
   id: LiteStatType;
   value: number;
   valueFormatter?: (value: number) => string;
-  getBucketValue?: (bucket: Record<string, number>) => number;
+  getBucketValue?: (bucket: GetOverviewBucketedResponse[number]) => number;
   isLoading: boolean;
   decimals?: number;
   postfix?: string;
@@ -64,7 +65,7 @@ const Stat = ({
         }
         return true;
       })
-      .map((d: Record<string, number>) => ({
+      .map(d => ({
         value: getBucketValue ? getBucketValue(d) : (d[id as StatType] ?? 0),
         time: d.time,
       })) ?? [];

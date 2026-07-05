@@ -78,7 +78,7 @@ services:
 
   backend:
     # Use an immutable tag (akash-<git-sha>) — mutable akash-v2 may not re-pull on Akash redeploy
-    image: ghcr.io/kiog-aser/rybbit-backend:akash-cc208a5
+    image: ghcr.io/kiog-aser/rybbit-backend:akash-a200219
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
@@ -112,7 +112,7 @@ services:
           - service: caddy
 
   client:
-    image: ghcr.io/kiog-aser/rybbit-client:akash-cc208a5
+    image: ghcr.io/kiog-aser/rybbit-client:akash-a200219
     env:
       - NODE_ENV=production
       - NEXT_PUBLIC_BACKEND_URL=https://analytics.milh.tech

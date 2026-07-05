@@ -4,6 +4,7 @@ import { createRequire } from "module";
 import { db } from "../db/postgres/postgres.js";
 import { getBootstrapAdminEmail } from "../lib/bootstrapAdmin.js";
 import {
+  AKASH_LEAN_MODE,
   BOOTSTRAP_ADMIN_EMAIL,
   BOOTSTRAP_ADMIN_MODE,
   DISABLE_SIGNUP,
@@ -11,6 +12,7 @@ import {
   MAPBOX_TOKEN,
   REVENUE_ATTRIBUTION,
 } from "../lib/const.js";
+import { isBetterAuthPasswordHash, passwordMatchesEnv } from "../lib/passwordHash.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json");
@@ -18,13 +20,15 @@ const { version } = require("../../package.json");
 type AuthReadiness = {
   tablesReady: boolean;
   bootstrapUserReady: boolean;
+  passwordVerified: boolean;
   error: string | null;
 };
 
 async function getAuthReadiness(): Promise<AuthReadiness> {
   const bootstrapEmail = getBootstrapAdminEmail();
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
   if (!bootstrapEmail) {
-    return { tablesReady: true, bootstrapUserReady: true, error: null };
+    return { tablesReady: true, bootstrapUserReady: true, passwordVerified: true, error: null };
   }
 
   try {
@@ -44,6 +48,7 @@ async function getAuthReadiness(): Promise<AuthReadiness> {
       return {
         tablesReady: false,
         bootstrapUserReady: false,
+        passwordVerified: false,
         error: "Auth tables missing — Postgres migrations have not completed yet",
       };
     }
@@ -56,6 +61,7 @@ async function getAuthReadiness(): Promise<AuthReadiness> {
       return {
         tablesReady: true,
         bootstrapUserReady: false,
+        passwordVerified: false,
         error: "Bootstrap admin user not created yet",
       };
     }
@@ -64,19 +70,28 @@ async function getAuthReadiness(): Promise<AuthReadiness> {
       sql`SELECT password FROM account WHERE "userId" = ${userId} AND "providerId" = 'credential' LIMIT 1`
     );
     const password = accounts[0]?.password;
-    const bootstrapUserReady = typeof password === "string" && password.includes(":");
+    const bootstrapUserReady = isBetterAuthPasswordHash(password);
+    let passwordVerified = false;
+
+    if (bootstrapUserReady && bootstrapPassword) {
+      passwordVerified = await passwordMatchesEnv(password, bootstrapPassword, AKASH_LEAN_MODE);
+    }
 
     return {
       tablesReady: true,
       bootstrapUserReady,
-      error: bootstrapUserReady
-        ? null
-        : "Bootstrap admin has no credential password — run bootstrap or redeploy backend",
+      passwordVerified,
+      error: !bootstrapUserReady
+        ? "Bootstrap admin has no valid credential password hash — redeploy backend to re-bootstrap"
+        : !passwordVerified
+          ? "Bootstrap password in DB does not match BOOTSTRAP_ADMIN_PASSWORD — redeploy backend"
+          : null,
     };
   } catch (error) {
     return {
       tablesReady: false,
       bootstrapUserReady: false,
+      passwordVerified: false,
       error: error instanceof Error ? error.message : "Auth readiness check failed",
     };
   }
@@ -103,7 +118,8 @@ export async function getConfig(_: FastifyRequest, reply: FastifyReply) {
     postgresReady,
     authTablesReady: auth.tablesReady,
     bootstrapUserReady: auth.bootstrapUserReady,
-    loginReady: postgresReady && auth.tablesReady && auth.bootstrapUserReady,
+    passwordVerified: auth.passwordVerified,
+    loginReady: postgresReady && auth.tablesReady && auth.bootstrapUserReady && auth.passwordVerified,
     authError: auth.error,
   });
 }

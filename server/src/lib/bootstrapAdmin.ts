@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres/postgres.js";
 import { user } from "../db/postgres/schema.js";
+import { AKASH_LEAN_MODE } from "./const.js";
 import { auth } from "./auth.js";
 import { createServiceLogger } from "./logger/logger.js";
+import { isBetterAuthPasswordHash, passwordMatchesEnv } from "./passwordHash.js";
 
 const logger = createServiceLogger("bootstrap-admin");
 
@@ -31,7 +33,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
   }
 
   const ctx = await auth.$context;
-  const existing = await ctx.internalAdapter.findUserByEmail(email);
+  const existing = await ctx.internalAdapter.findUserByEmail(email, { includeAccounts: true });
   const hashedPassword = await ctx.password.hash(password);
 
   if (!existing?.user) {
@@ -68,9 +70,16 @@ export async function ensureBootstrapAdmin(): Promise<void> {
       userId: existing.user.id,
     });
   } else {
-    // Always sync password from env so redeploys / SDL password changes take effect.
-    // Stale or malformed hashes cause sign-in/email to 500 (scrypt verify throws).
-    await ctx.internalAdapter.updatePassword(existing.user.id, hashedPassword);
+    const storedHash = credentialAccount.password;
+    const hashLooksValid = isBetterAuthPasswordHash(storedHash);
+    const passwordMatches =
+      hashLooksValid && (await passwordMatchesEnv(storedHash, password, AKASH_LEAN_MODE));
+
+    // Re-hash when env password changed, hash format is invalid, or verify would throw in Better Auth.
+    if (!passwordMatches) {
+      await ctx.internalAdapter.updatePassword(existing.user.id, hashedPassword);
+      logger.info({ email, hashLooksValid }, "Refreshed bootstrap admin credential password");
+    }
   }
 
   logger.info({ email }, "Bootstrap admin account ready");

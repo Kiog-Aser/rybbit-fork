@@ -31,6 +31,7 @@ import {
 import { onboardingTipsService } from "../services/onboardingTips/onboardingTipsService.js";
 import { getTrustedCorsOrigins } from "./cors.js";
 import { createServiceLogger } from "./logger/logger.js";
+import { defaultPassword, leanPassword } from "./passwordHash.js";
 
 dotenv.config();
 
@@ -213,6 +214,8 @@ export const auth = betterAuth({
     // Disable email verification for now
     requireEmailVerification: false,
     disableSignUp: DISABLE_SIGNUP,
+    // Akash pods are memory-tight; use lean scrypt + non-throwing verify (malformed hashes → 401, not 500).
+    password: AKASH_LEAN_MODE ? leanPassword : defaultPassword,
   },
   emailVerification: {
     sendVerificationEmail: async ({

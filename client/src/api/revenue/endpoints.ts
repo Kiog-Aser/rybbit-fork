@@ -21,24 +21,28 @@ export interface RevenueOverviewResponse {
   }>;
 }
 
-export async function fetchStripeRevenueStatus(siteId: number) {
+export async function fetchStripeRevenueStatus(siteId: string | number) {
   return authedFetch<StripeRevenueStatus>(`/sites/${siteId}/revenue/status`);
 }
 
-export async function connectStripeRevenue(siteId: number, restrictedKey: string, webhookSecret?: string) {
+export async function connectStripeRevenue(
+  siteId: string | number,
+  restrictedKey: string,
+  webhookSecret?: string
+) {
   return authedFetch<{ success: boolean }>(`/sites/${siteId}/revenue/stripe/connect`, {
     method: "POST",
     body: JSON.stringify({ restrictedKey, webhookSecret }),
   });
 }
 
-export async function disconnectStripeRevenue(siteId: number) {
+export async function disconnectStripeRevenue(siteId: string | number) {
   return authedFetch<{ success: boolean }>(`/sites/${siteId}/revenue/stripe/connect`, {
     method: "DELETE",
   });
 }
 
-export async function fetchRevenueOverview(siteId: number, startTime: string, endTime: string) {
+export async function fetchRevenueOverview(siteId: string | number, startTime: string, endTime: string) {
   const params = new URLSearchParams({ startTime, endTime });
   const response = await authedFetch<{ data: RevenueOverviewResponse }>(
     `/sites/${siteId}/revenue/overview?${params.toString()}`

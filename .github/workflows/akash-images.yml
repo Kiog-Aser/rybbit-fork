@@ -46,7 +46,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./server/Dockerfile
+          file: ./server/Dockerfile.akash
           platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-backend:${{ env.TAG }}

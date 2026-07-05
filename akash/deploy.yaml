@@ -14,7 +14,16 @@ version: "2.0"
 
 services:
   clickhouse:
-    image: ghcr.io/kiog-aser/rybbit-clickhouse:akash
+    image: clickhouse/clickhouse-server:25.4.2
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /etc/clickhouse-server/config.d
+        printf '%s\n' '<clickhouse><listen_host>0.0.0.0</listen_host></clickhouse>' > /etc/clickhouse-server/config.d/network.xml
+        printf '%s\n' '<clickhouse><settings><enable_json_type>1</enable_json_type></settings></clickhouse>' > /etc/clickhouse-server/config.d/enable_json.xml
+        printf '%s\n' '<clickhouse><max_server_memory_usage_to_ram_ratio>0.5</max_server_memory_usage_to_ram_ratio><mark_cache_size>67108864</mark_cache_size><uncompressed_cache_size>33554432</uncompressed_cache_size><merge_tree><max_bytes_to_merge_at_max_space_in_pool>104857600</max_bytes_to_merge_at_max_space_in_pool></merge_tree></clickhouse>' > /etc/clickhouse-server/config.d/akash-lean.xml
+        exec /entrypoint.sh
     env:
       - CLICKHOUSE_DB=analytics
       - CLICKHOUSE_USER=default
@@ -71,10 +80,6 @@ services:
 
   backend:
     image: ghcr.io/kiog-aser/rybbit-backend:akash
-    depends-on:
-      - clickhouse
-      - postgres
-      - redis
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
@@ -95,11 +100,12 @@ services:
       - REDIS_PASSWORD=changeme
       - BETTER_AUTH_SECRET=replace-me-with-long-random-string
       - BASE_URL=https://analytics.milh.tech
-      - BOOTSTRAP_ADMIN_EMAIL=you@example.com
+      - BOOTSTRAP_ADMIN_EMAIL=mil@poke.com
       - BOOTSTRAP_ADMIN_PASSWORD=change-me-to-a-long-password
       - BOOTSTRAP_ADMIN_NAME=Admin
       - DISABLE_SIGNUP=true
       - DISABLE_TELEMETRY=true
+      - LOG_LEVEL=warn
     expose:
       - port: 3001
         to:
@@ -170,7 +176,7 @@ profiles:
         cpu:
           units: 0.35
         memory:
-          size: 512Mi
+          size: 768Mi
         storage:
           size: 512Mi
     client:

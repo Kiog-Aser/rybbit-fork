@@ -1,5 +1,5 @@
 import { createClient } from "@clickhouse/client";
-import { IS_CLOUD, LITE_DASHBOARD, REVENUE_ATTRIBUTION } from "../../lib/const.js";
+import { AKASH_LEAN_MODE, IS_CLOUD, LITE_DASHBOARD, REVENUE_ATTRIBUTION } from "../../lib/const.js";
 import { createServiceLogger } from "../../lib/logger/logger.js";
 
 const CLICKHOUSE_REQUEST_TIMEOUT_MS = 300_000;
@@ -310,7 +310,18 @@ export const initializeClickhouse = async () => {
   }
 
   if (LITE_DASHBOARD) {
-    await initializeLiteDashboardMVs();
+    try {
+      await initializeLiteDashboardMVs();
+    } catch (error) {
+      if (AKASH_LEAN_MODE) {
+        logger.warn(
+          { err: error },
+          "Lite dashboard materialized view init failed in lean mode; analytics will use raw events"
+        );
+      } else {
+        throw error;
+      }
+    }
   }
 };
 

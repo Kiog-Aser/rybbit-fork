@@ -17,6 +17,17 @@ import { isBetterAuthPasswordHash, passwordMatchesEnv } from "../lib/passwordHas
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json");
 
+function formatDbError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Unknown database error";
+  }
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error) {
+    return `${cause.message}`;
+  }
+  return error.message;
+}
+
 type AuthReadiness = {
   tablesReady: boolean;
   bootstrapUserReady: boolean;
@@ -92,18 +103,19 @@ export async function getAuthReadiness(): Promise<AuthReadiness> {
       tablesReady: false,
       bootstrapUserReady: false,
       passwordVerified: false,
-      error: error instanceof Error ? error.message : "Auth readiness check failed",
+      error: formatDbError(error),
     };
   }
 }
 
 export async function getConfig(_: FastifyRequest, reply: FastifyReply) {
   let postgresReady = false;
+  let postgresError: string | null = null;
   try {
     await db.execute(sql`SELECT 1`);
     postgresReady = true;
-  } catch {
-    postgresReady = false;
+  } catch (error) {
+    postgresError = formatDbError(error);
   }
 
   const auth = await getAuthReadiness();
@@ -116,6 +128,8 @@ export async function getConfig(_: FastifyRequest, reply: FastifyReply) {
     liteDashboard: LITE_DASHBOARD,
     revenueAttribution: REVENUE_ATTRIBUTION,
     postgresReady,
+    postgresError,
+    postgresHost: process.env.POSTGRES_HOST || "postgres",
     authTablesReady: auth.tablesReady,
     bootstrapUserReady: auth.bootstrapUserReady,
     passwordVerified: auth.passwordVerified,

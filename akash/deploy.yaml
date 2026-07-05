@@ -45,7 +45,7 @@ services:
       - -c
       - maintenance_work_mem=32MB
       - -c
-      - max_connections=40
+      - max_connections=20
       - -c
       - wal_buffers=4MB
       - -c
@@ -158,7 +158,7 @@ profiles:
         cpu:
           units: 0.25
         memory:
-          size: 768Mi
+          size: 1Gi
         storage:
           - size: 512Mi
           - name: data

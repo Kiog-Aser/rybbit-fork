@@ -583,4 +583,53 @@ async function initializeLiteDashboardMVs() {
       GROUP BY site_id, session_hour
     `,
   });
+
+  // Rybbit export instant imports write here instead of the refreshable MV
+  // targets (which are fully replaced every 5 minutes from live events).
+  await clickhouse.exec({
+    query: `
+      CREATE TABLE IF NOT EXISTS session_hourly_import_target (
+        site_id UInt16,
+        import_id UUID,
+        session_hour DateTime,
+        sessions UInt64,
+        pageviews UInt64,
+        users AggregateFunction(uniq, String),
+        total_session_duration_seconds UInt64,
+        bounced_sessions UInt64
+      )
+      ENGINE = MergeTree()
+      PARTITION BY toYYYYMM(session_hour)
+      ORDER BY (site_id, import_id, session_hour)
+    `,
+  });
+
+  await clickhouse.exec({
+    query: `
+      CREATE TABLE IF NOT EXISTS overview_hourly_import_target (
+        site_id UInt16,
+        import_id UUID,
+        event_hour DateTime,
+        pageviews SimpleAggregateFunction(sum, UInt64),
+        events SimpleAggregateFunction(sum, UInt64),
+        users AggregateFunction(uniq, String),
+        sessions AggregateFunction(uniq, String)
+      )
+      ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(event_hour)
+      ORDER BY (site_id, import_id, event_hour)
+    `,
+  });
+
+  await clickhouse.exec({
+    query: `
+      CREATE TABLE IF NOT EXISTS import_mv_backfill (
+        site_id UInt16,
+        import_id UUID,
+        session_hour DateTime
+      )
+      ENGINE = MergeTree()
+      ORDER BY (site_id, import_id, session_hour)
+    `,
+  });
 }

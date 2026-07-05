@@ -7,6 +7,7 @@ import {
   type BotDimensionKey,
   type BotLayerKey,
   getBotFilterStatement,
+  getBotCategoryStatement,
   getBotLayerStatement,
   getBotSqlParam,
 } from "./utils.js";
@@ -30,6 +31,7 @@ export interface BotDimensionRequest {
   Querystring: FilterParams<{
     dimension: BotDimensionKey;
     layer?: BotLayerKey;
+    category?: string;
     limit?: number;
     page?: number;
   }>;
@@ -50,6 +52,9 @@ const getQuery = (request: FastifyRequest<BotDimensionRequest>, isCountQuery = f
   const timeStatement = getTimeStatement(request.query);
   const filterStatement = getBotFilterStatement(request.query.filters);
   const layerStatement = getBotLayerStatement(request.query.layer);
+  const categoryStatement = getBotCategoryStatement(request.query.category);
+  const crawlerOnlyStatement =
+    dimension === "matched_ua_pattern" ? "AND detected_ua_pattern AND matched_ua_pattern != ''" : "";
   const validatedLimit = parsePositiveInt(limit, 100);
   const validatedPage = parsePositiveInt(page, 1);
   const offset = (validatedPage - 1) * validatedLimit;
@@ -64,6 +69,8 @@ const getQuery = (request: FastifyRequest<BotDimensionRequest>, isCountQuery = f
     WHERE site_id = {siteId:Int32}
       ${filterStatement}
       ${layerStatement}
+      ${categoryStatement}
+      ${crawlerOnlyStatement}
       ${timeStatement}
     GROUP BY value
   `;

@@ -2,7 +2,7 @@ import { FilterParams } from "@rybbit/shared";
 import { FastifyReply, FastifyRequest } from "fastify";
 import { clickhouse } from "../../../db/clickhouse/clickhouse.js";
 import { getTimeStatement, processResults } from "../utils/utils.js";
-import { type BotLayerKey, getBotFilterStatement, getBotLayerStatement } from "./utils.js";
+import { type BotLayerKey, getBotCategoryStatement, getBotFilterStatement, getBotLayerStatement } from "./utils.js";
 
 type BotOverviewResponse = {
   bot_requests: number;
@@ -21,6 +21,7 @@ export interface BotOverviewRequest {
   };
   Querystring: FilterParams<{
     layer?: BotLayerKey;
+    category?: string;
   }>;
 }
 
@@ -28,6 +29,7 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
   const timeStatement = getTimeStatement(params);
   const filterStatement = getBotFilterStatement(params.filters);
   const layerStatement = getBotLayerStatement(params.layer);
+  const categoryStatement = getBotCategoryStatement(params.category);
 
   return `
     WITH
@@ -43,6 +45,7 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
         WHERE site_id = {siteId:Int32}
           ${filterStatement}
           ${layerStatement}
+          ${categoryStatement}
           ${timeStatement}
       ),
       all_bot_stats AS (
@@ -50,6 +53,7 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
         FROM bot_events
         WHERE site_id = {siteId:Int32}
           ${filterStatement}
+          ${categoryStatement}
           ${timeStatement}
       ),
       event_stats AS (

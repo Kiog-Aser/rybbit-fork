@@ -237,8 +237,7 @@ export async function getFunnelStepSessions(req: FastifyRequest<GetFunnelStepSes
         countIf(e.type = 'outbound') AS outbound,
         argMax(e.ip, e.timestamp) AS ip,
         argMax(e.lat, e.timestamp) AS lat,
-        argMax(e.lon, e.timestamp) AS lon,
-        argMax(e.tag, e.timestamp) AS tag
+        argMax(e.lon, e.timestamp) AS lon
       FROM events e
       INNER JOIN TargetSessions ts ON e.session_id = ts.session_id
       WHERE

@@ -13,6 +13,7 @@ export const BOT_LAYER_COLUMNS = {
 } as const;
 
 export type BotLayerKey = keyof typeof BOT_LAYER_COLUMNS;
+export type BotCategoryFilter = "search" | "ai" | "seo" | "social" | "monitoring";
 export type BotDimensionKey = FilterParameter | "asn_org" | "bot_category" | "matched_ua_pattern";
 
 const BOT_FILTER_PARAMETERS = new Set<FilterParameter>([
@@ -59,6 +60,26 @@ export function getBotLayerStatement(layer?: string | null) {
 
   const column = BOT_LAYER_COLUMNS[layer as BotLayerKey];
   return column ? `AND ${column}` : "";
+}
+
+const BOT_CATEGORY_FILTERS: Record<string, BotCategoryFilter[]> = {
+  indexing: ["search"],
+  ai_answers: ["ai"],
+  training: ["seo"],
+};
+
+export function getBotCategoryStatement(category?: string | null) {
+  if (!category || category === "all") {
+    return "";
+  }
+
+  const categories = BOT_CATEGORY_FILTERS[category];
+  if (!categories?.length) {
+    return "";
+  }
+
+  const escaped = categories.map(c => SqlString.escape(c)).join(", ");
+  return `AND bot_category IN (${escaped})`;
 }
 
 const filterTypeToOperator = (type: FilterType) => {

@@ -25,4 +25,5 @@ export {
 export { getSiteImports } from "./getSiteImports.js";
 export { createSiteImport } from "./createSiteImport.js";
 export { batchImportEvents } from "./batchImportEvents.js";
+export { instantRybbitExportImport } from "./instantRybbitExportImport.js";
 export { deleteSiteImport } from "./deleteSiteImport.js";

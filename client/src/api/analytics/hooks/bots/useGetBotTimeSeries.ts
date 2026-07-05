@@ -17,15 +17,17 @@ export function useGetBotTimeSeries({
   props?: Partial<UseQueryOptions<APIResponse<GetBotTimeSeriesResponse>>>;
 }): UseQueryResult<APIResponse<GetBotTimeSeriesResponse>> {
   const { time, filters, bucket: storeBucket, timezone } = useStore();
-  const { selectedLayer } = useBotsStore();
+  const { selectedLayer, selectedCategory } = useBotsStore();
   const bucketToUse = bucket || storeBucket;
   const botFilters = filters.filter(filter => BOT_AVAILABLE_FILTERS.includes(filter.parameter));
   const params = buildApiParams(time, { filters: botFilters });
 
   return useQuery({
-    queryKey: ["bot-time-series", time, bucketToUse, site, botFilters, selectedLayer, timezone],
+    queryKey: ["bot-time-series", time, bucketToUse, site, botFilters, selectedLayer, selectedCategory, timezone],
     queryFn: () =>
-      fetchBotTimeSeries(site, { ...params, bucket: bucketToUse, layer: selectedLayer }).then(data => ({ data })),
+      fetchBotTimeSeries(site, { ...params, bucket: bucketToUse, layer: selectedLayer, category: selectedCategory }).then(
+        data => ({ data })
+      ),
     placeholderData: (_, query: any) => {
       if (!query?.queryKey) return undefined;
       const [, , , prevSite] = query.queryKey as [string, any, TimeBucket, string | number];

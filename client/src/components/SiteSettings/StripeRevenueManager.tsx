@@ -42,7 +42,8 @@ export function StripeRevenueManager({ disabled = false }: StripeRevenueManagerP
           setRestrictedKey("");
           refetch();
         },
-        onError: () => toast.error(t("Failed to connect Stripe")),
+        onError: (error: Error) =>
+          toast.error(error.message || t("Failed to connect Stripe")),
       }
     );
   };

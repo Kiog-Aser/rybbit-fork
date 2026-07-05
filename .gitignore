@@ -41,7 +41,11 @@ coverage/
 .cache/
 
 # Production
-.env.production 
+.env.production
+
+# Akash SDL with real secrets — never commit
+akash/deploy.ready.yaml
+akash/deploy.local.yaml
 
 .cursor/
 

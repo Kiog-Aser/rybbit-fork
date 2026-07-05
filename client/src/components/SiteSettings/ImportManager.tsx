@@ -22,11 +22,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Upload, FileText, AlertCircle, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import { useExtracted } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetSiteImports, useCreateSiteImport, useDeleteSiteImport } from "@/api/admin/hooks/useImport";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { IS_CLOUD } from "@/lib/const";
 import { CsvParser } from "@/lib/import/csvParser";
 import { PlausibleCsvParser } from "@/lib/import/plausibleParser";
+import { instantImportRybbitExport, parseRybbitExportZip } from "@/lib/import/rybbitExportParser";
 import { ImportPlatform } from "@/types/import";
 import { DisabledOverlay } from "@/components/DisabledOverlay";
 
@@ -53,12 +55,14 @@ function formatPlatformName(platform: ImportPlatform): string {
     umami: "Umami",
     simple_analytics: "Simple Analytics",
     plausible: "Plausible",
+    rybbit_export: "Rybbit Export",
   };
   return platformNames[platform];
 }
 
 export function ImportManager({ siteId, disabled }: ImportManagerProps) {
   const t = useExtracted();
+  const queryClient = useQueryClient();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [importToDelete, setImportToDelete] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -73,9 +77,11 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
     }
 
     const extension = "." + file.name.split(".").pop()?.toLowerCase();
-    if (platform === "plausible") {
+    if (platform === "plausible" || platform === "rybbit_export") {
       if (extension !== ".zip" && !["application/zip", "application/x-zip-compressed"].includes(file.type)) {
-        return t("Please upload a ZIP file exported from Plausible");
+        return platform === "plausible"
+          ? t("Please upload a ZIP file exported from Plausible")
+          : t("Please upload a ZIP file exported from Rybbit");
       }
     } else {
       if (extension !== ".csv" && file.type !== "text/csv") {
@@ -113,36 +119,45 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
     }
   };
 
-  const executeImport = () => {
+  const executeImport = async () => {
     if (!selectedFile || !selectedPlatform) return;
 
+    const file = selectedFile;
+    const platform = selectedPlatform;
+
     createImportMutation.mutate(
-      { platform: selectedPlatform },
+      { platform },
       {
-        onSuccess: response => {
+        onSuccess: async response => {
           const { importId, allowedDateRange } = response.data;
 
-          if (selectedPlatform === "plausible") {
-            const parser = new PlausibleCsvParser(
-              siteId,
-              importId,
-              allowedDateRange.earliestAllowedDate,
-              allowedDateRange.latestAllowedDate
-            );
-            workerManagerRef.current = parser;
-            parser.startImport(selectedFile).catch((err) => {
-              console.error("Plausible import failed:", err);
-            });
-          } else {
-            const parser = new CsvParser(
-              siteId,
-              importId,
-              selectedPlatform,
-              allowedDateRange.earliestAllowedDate,
-              allowedDateRange.latestAllowedDate
-            );
-            workerManagerRef.current = parser;
-            parser.startImport(selectedFile);
+          try {
+            if (platform === "rybbit_export") {
+              const timeseries = await parseRybbitExportZip(file);
+              await instantImportRybbitExport(siteId, importId, timeseries);
+              await queryClient.invalidateQueries({ queryKey: ["get-site-imports", siteId] });
+            } else if (platform === "plausible") {
+              const parser = new PlausibleCsvParser(
+                siteId,
+                importId,
+                allowedDateRange.earliestAllowedDate,
+                allowedDateRange.latestAllowedDate
+              );
+              workerManagerRef.current = parser;
+              await parser.startImport(file);
+            } else {
+              const parser = new CsvParser(
+                siteId,
+                importId,
+                platform,
+                allowedDateRange.earliestAllowedDate,
+                allowedDateRange.latestAllowedDate
+              );
+              workerManagerRef.current = parser;
+              parser.startImport(file);
+            }
+          } catch (err) {
+            console.error("Import failed:", err);
           }
 
           setSelectedFile(null);
@@ -255,6 +270,7 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
                     <SelectItem value="umami">Umami</SelectItem>
                     <SelectItem value="simple_analytics">Simple Analytics</SelectItem>
                     <SelectItem value="plausible">Plausible</SelectItem>
+                    <SelectItem value="rybbit_export">Rybbit Export</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -263,13 +279,15 @@ export function ImportManager({ siteId, disabled }: ImportManagerProps) {
               <div className="space-y-2">
                 <Label htmlFor="file" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  {selectedPlatform === "plausible" ? t("ZIP File") : t("CSV File")}
+                  {selectedPlatform === "plausible" || selectedPlatform === "rybbit_export"
+                    ? t("ZIP File")
+                    : t("CSV File")}
                 </Label>
                 <Input
                   ref={fileInputRef}
                   id="file"
                   type="file"
-                  accept={selectedPlatform === "plausible" ? ".zip" : ".csv"}
+                  accept={selectedPlatform === "plausible" || selectedPlatform === "rybbit_export" ? ".zip" : ".csv"}
                   multiple={false}
                   onChange={handleFileChange}
                   disabled={disabled || createImportMutation.isPending || hasActiveImport}

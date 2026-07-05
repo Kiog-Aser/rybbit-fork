@@ -17,14 +17,16 @@ export function useGetBotDimension({
   page?: number;
 }) {
   const { time, filters, timezone } = useStore();
-  const { selectedLayer } = useBotsStore();
+  const { selectedLayer, selectedCategory } = useBotsStore();
   const botFilters = filters.filter(filter => BOT_AVAILABLE_FILTERS.includes(filter.parameter));
   const params = buildApiParams(time, { filters: botFilters });
 
   return useQuery({
-    queryKey: ["bot-dimension", time, site, dimension, limit, page, botFilters, selectedLayer, timezone],
+    queryKey: ["bot-dimension", time, site, dimension, limit, page, botFilters, selectedLayer, selectedCategory, timezone],
     queryFn: () =>
-      fetchBotDimension(site!, { ...params, dimension, limit, page, layer: selectedLayer }).then(data => ({ data })),
+      fetchBotDimension(site!, { ...params, dimension, limit, page, layer: selectedLayer, category: selectedCategory }).then(
+        data => ({ data })
+      ),
     staleTime: 60_000,
     placeholderData: (_, query: any) => {
       if (!query?.queryKey) return undefined;

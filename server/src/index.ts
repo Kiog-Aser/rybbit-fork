@@ -116,6 +116,7 @@ import {
   addSite,
   batchImportEvents,
   createSiteImport,
+  instantRybbitExportImport,
   deleteSite,
   deleteSiteImport,
   getEmbedStats,
@@ -397,6 +398,11 @@ async function sitesRoutes(fastify: FastifyInstance) {
     "/sites/:siteId/imports/:importId/events",
     { ...adminSite, bodyLimit: 50 * 1024 * 1024 },
     batchImportEvents
+  );
+  fastify.post(
+    "/sites/:siteId/imports/:importId/rybbit-export",
+    { ...adminSite, bodyLimit: 5 * 1024 * 1024 },
+    instantRybbitExportImport
   );
   fastify.delete("/sites/:siteId/imports/:importId", adminSite, deleteSiteImport);
 }

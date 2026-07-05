@@ -92,9 +92,27 @@ export async function getOverviewLite(
           uniqMerge(users) AS users,
           sum(bounced_sessions) AS bounced_sessions,
           sum(total_session_duration_seconds) AS total_session_duration_seconds
-        FROM session_hourly_mv_target
-        WHERE site_id = {siteId:Int32}
-          ${timeStatement}
+        FROM (
+          SELECT
+            sessions,
+            pageviews,
+            users,
+            bounced_sessions,
+            total_session_duration_seconds
+          FROM session_hourly_mv_target
+          WHERE site_id = {siteId:Int32}
+            ${timeStatement}
+          UNION ALL
+          SELECT
+            sessions,
+            pageviews,
+            users,
+            bounced_sessions,
+            total_session_duration_seconds
+          FROM session_hourly_import_target
+          WHERE site_id = {siteId:Int32}
+            ${timeStatement}
+        )
       )
     `;
   }

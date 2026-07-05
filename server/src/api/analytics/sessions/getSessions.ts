@@ -144,8 +144,7 @@ export async function getSessions(req: FastifyRequest<GetSessionsRequest>, res: 
           countIf(type = 'input_change') AS input_changes,
           argMax(ip, timestamp) AS ip,
           argMax(lat, timestamp) AS lat,
-          argMax(lon, timestamp) AS lon,
-          argMax(tag, timestamp) AS tag
+          argMax(lon, timestamp) AS lon
       FROM events
       WHERE
           site_id = {siteId:Int32}

@@ -47,9 +47,17 @@ function buildHourBucketQuery(args: {
         toDateTime(${fn}(toTimeZone(event_hour, ${tz}))) AS time,
         sum(pageviews) AS pageviews,
         uniqMerge(users) AS users
-      FROM overview_hourly_mv_target
-      WHERE site_id = {siteId:Int32}
-        ${overviewTime}
+      FROM (
+        SELECT event_hour, pageviews, users
+        FROM overview_hourly_mv_target
+        WHERE site_id = {siteId:Int32}
+          ${overviewTime}
+        UNION ALL
+        SELECT event_hour, pageviews, users
+        FROM overview_hourly_import_target
+        WHERE site_id = {siteId:Int32}
+          ${overviewTime}
+      )
       GROUP BY time
       ORDER BY time ${fill}
     ) p
@@ -105,9 +113,17 @@ function buildDayBucketQuery(args: {
         uniqMerge(users) AS users,
         sum(bounced_sessions) AS bounced_sessions,
         sum(total_session_duration_seconds) AS total_session_duration_seconds
-      FROM session_hourly_mv_target
-      WHERE site_id = {siteId:Int32}
-        ${sessionTime}
+      FROM (
+        SELECT session_hour, sessions, pageviews, users, bounced_sessions, total_session_duration_seconds
+        FROM session_hourly_mv_target
+        WHERE site_id = {siteId:Int32}
+          ${sessionTime}
+        UNION ALL
+        SELECT session_hour, sessions, pageviews, users, bounced_sessions, total_session_duration_seconds
+        FROM session_hourly_import_target
+        WHERE site_id = {siteId:Int32}
+          ${sessionTime}
+      )
       GROUP BY time
       ORDER BY time ${fill}
     )

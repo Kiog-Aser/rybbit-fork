@@ -135,7 +135,8 @@ export function OverviewLite() {
   const { data: overviewData, isLoading } = useGetOverview({ site, lite: true });
   const { data: stripeStatus } = useStripeRevenueStatus();
   const { data: revenueOverview, isLoading: revenueLoading } = useRevenueOverview();
-  const showRevenue = REVENUE_ATTRIBUTION && stripeStatus?.connected;
+  const showRevenue = REVENUE_ATTRIBUTION;
+  const stripeConnected = Boolean(stripeStatus?.connected);
 
   const users = overviewData?.data?.users ?? 0;
   const sessions = overviewData?.data?.sessions ?? 0;
@@ -189,8 +190,15 @@ export function OverviewLite() {
           <div className="flex flex-col px-3 py-2">
             <div className="text-xs font-medium text-muted-foreground">{t("Revenue")}</div>
             <div className="text-2xl font-medium text-green-600 dark:text-green-400">
-              {revenueLoading ? <Skeleton className="w-[72px] h-9 rounded-md" /> : formatRevenue(revenueCents)}
+              {revenueLoading ? (
+                <Skeleton className="w-[72px] h-9 rounded-md" />
+              ) : (
+                formatRevenue(revenueCents)
+              )}
             </div>
+            {!stripeConnected && !revenueLoading && (
+              <div className="text-[10px] text-muted-foreground mt-0.5">{t("Connect Stripe in Settings")}</div>
+            )}
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import { useSetPageTitle } from "../../../hooks/useSetPageTitle";
 import { useStore } from "../../../lib/store";
 import { SubHeader } from "../components/SubHeader/SubHeader";
 import { BotChart } from "./components/BotChart";
+import { BotCrawlers } from "./components/BotCrawlers";
 import { BotsOverview } from "./components/BotsOverview";
 import { BotCountries } from "./components/sections/BotCountries";
 import { BotDevices } from "./components/sections/BotDevices";
@@ -36,6 +37,7 @@ export default function BotsPage() {
       <SubHeader availableFilters={BOT_AVAILABLE_FILTERS} />
       <div className="space-y-4">
         <BotsOverview />
+        <BotCrawlers />
         <BotChart />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">

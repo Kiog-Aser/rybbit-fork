@@ -30,16 +30,22 @@ export async function connectStripeRevenue(
   restrictedKey: string,
   webhookSecret?: string
 ) {
-  return authedFetch<{ success: boolean }>(`/sites/${siteId}/revenue/stripe/connect`, {
-    method: "POST",
-    body: JSON.stringify({ restrictedKey, webhookSecret }),
-  });
+  return authedFetch<{ success: boolean }>(
+    `/sites/${siteId}/revenue/stripe/connect`,
+    undefined,
+    {
+      method: "POST",
+      data: { restrictedKey, webhookSecret },
+    }
+  );
 }
 
 export async function disconnectStripeRevenue(siteId: string | number) {
-  return authedFetch<{ success: boolean }>(`/sites/${siteId}/revenue/stripe/connect`, {
-    method: "DELETE",
-  });
+  return authedFetch<{ success: boolean }>(
+    `/sites/${siteId}/revenue/stripe/connect`,
+    undefined,
+    { method: "DELETE" }
+  );
 }
 
 export async function fetchRevenueOverview(siteId: string | number, startTime: string, endTime: string) {

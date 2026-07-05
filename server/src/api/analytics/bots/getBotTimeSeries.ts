@@ -4,7 +4,13 @@ import SqlString from "sqlstring";
 import { clickhouse } from "../../../db/clickhouse/clickhouse.js";
 import { TimeBucket } from "../types.js";
 import { getTimeStatement, processResults, TimeBucketToFn } from "../utils/utils.js";
-import { type BotLayerKey, getBotFilterStatement, getBotLayerStatement, getBotTimeStatementFill } from "./utils.js";
+import {
+  type BotLayerKey,
+  getBotCategoryStatement,
+  getBotFilterStatement,
+  getBotLayerStatement,
+  getBotTimeStatementFill,
+} from "./utils.js";
 
 type BotTimeSeriesPoint = {
   time: string;
@@ -18,6 +24,7 @@ export interface BotTimeSeriesRequest {
   Querystring: FilterParams<{
     bucket: TimeBucket;
     layer?: BotLayerKey;
+    category?: string;
   }>;
 }
 
@@ -26,6 +33,7 @@ const getQuery = (params: BotTimeSeriesRequest["Querystring"]) => {
   const timeStatement = getTimeStatement(params);
   const filterStatement = getBotFilterStatement(params.filters);
   const layerStatement = getBotLayerStatement(params.layer);
+  const categoryStatement = getBotCategoryStatement(params.category);
   const hasBoundedTime =
     Boolean(params.start_date && params.end_date) ||
     Boolean(params.start_datetime && params.end_datetime) ||
@@ -41,6 +49,7 @@ const getQuery = (params: BotTimeSeriesRequest["Querystring"]) => {
     WHERE site_id = {siteId:Int32}
       ${filterStatement}
       ${layerStatement}
+      ${categoryStatement}
       ${timeStatement}
     GROUP BY time
     ORDER BY time ${fillClause}

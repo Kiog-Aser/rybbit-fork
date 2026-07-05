@@ -139,7 +139,10 @@ export function SpinningGlobe() {
   const [isSupported] = useState(isWebGL2Supported);
   const { configs, isLoading: isLoadingConfigs } = useConfigs();
 
-  // Fetch demo sessions
+  const isDemoHost =
+    typeof window !== "undefined" && window.location.hostname === "demo.rybbit.com";
+
+  // Demo sessions globe — only on demo.rybbit.com (avoids ad-blocker noise on self-hosted).
   const { data: sessionsData } = useQuery<{ data: GetSessionsResponse }>({
     queryKey: ["demo-sessions"],
     queryFn: async () => {
@@ -148,6 +151,7 @@ export function SpinningGlobe() {
       );
       return response.json();
     },
+    enabled: isDemoHost,
     staleTime: Infinity,
   });
 

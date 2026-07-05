@@ -18,8 +18,8 @@ if [ "${AKASH_LEAN_MODE:-}" = "true" ] || [ "${SKIP_ENTRYPOINT_WAITS:-}" = "true
     attempt=0
     until pg_isready -h "${POSTGRES_HOST:-postgres}" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-frog}" -d "${POSTGRES_DB:-analytics}" -q; do
       attempt=$((attempt + 1))
-      if [ "$attempt" -ge 120 ]; then
-        echo "[entrypoint] WARN: PostgreSQL not ready after 120s — skipping background migrations"
+      if [ "$attempt" -ge 300 ]; then
+        echo "[entrypoint] WARN: PostgreSQL not ready after 600s — Node will retry migrations"
         exit 0
       fi
       sleep 2

@@ -477,8 +477,20 @@ async function apiRoutes(fastify: FastifyInstance) {
   await fastify.register(revenueRoutes);
   await fastify.register(stripeAdminRoutes);
 
-  // Health check
-  fastify.get("/health", { logLevel: "silent" }, (_: FastifyRequest, reply: FastifyReply) => reply.send("OK"));
+  // Health check — lean mode also verifies Postgres (auth needs migrated tables).
+  fastify.get("/health", { logLevel: "silent" }, async (_: FastifyRequest, reply: FastifyReply) => {
+    if (!AKASH_LEAN_MODE) {
+      return reply.send("OK");
+    }
+    try {
+      const { sql } = await import("drizzle-orm");
+      const { db } = await import("./db/postgres/postgres.js");
+      await db.execute(sql`SELECT 1`);
+      return reply.send("OK");
+    } catch {
+      return reply.status(503).send("DB not ready");
+    }
+  });
 }
 
 server.post("/api/track", trackEvent);
@@ -490,26 +502,31 @@ server.register(apiRoutes, { prefix: "/api" });
 async function runBackgroundInitialization() {
   try {
     if (AKASH_LEAN_MODE) {
-      const { execFile } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const execFileAsync = promisify(execFile);
+      const { runMigrationsWithRetry, ensureBootstrapAdminWithRetry } = await import(
+        "./db/postgres/migrateWithRetry.js"
+      );
       try {
-        await execFileAsync("npm", ["run", "db:migrate"], { cwd: process.cwd() });
-        server.log.info("Database migrations complete");
-      } catch (migrateError) {
-        server.log.warn(migrateError, "Database migrations failed (tables may already exist)");
+        await runMigrationsWithRetry();
+        await ensureBootstrapAdminWithRetry();
+      } catch (leanInitError) {
+        server.log.error(
+          leanInitError,
+          "Akash lean init failed (Postgres migrations or bootstrap admin — login will 500 until fixed)"
+        );
       }
     }
 
     await Promise.all([initializeClickhouse(), initPostgres()]);
-    try {
-      const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
-      await ensureBootstrapAdmin();
-    } catch (bootstrapError) {
-      server.log.error(
-        bootstrapError,
-        "Bootstrap admin setup failed (fix BOOTSTRAP_* env or create user manually)"
-      );
+    if (!AKASH_LEAN_MODE) {
+      try {
+        const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
+        await ensureBootstrapAdmin();
+      } catch (bootstrapError) {
+        server.log.error(
+          bootstrapError,
+          "Bootstrap admin setup failed (fix BOOTSTRAP_* env or create user manually)"
+        );
+      }
     }
 
     telemetryService.startTelemetryCron();

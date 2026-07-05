@@ -37,7 +37,13 @@ services:
     args:
       - postgres
       - -c
-      - shared_buffers=64MB
+      - shared_buffers=32MB
+      - -c
+      - effective_cache_size=96MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
       - -c
       - max_connections=40
     env:
@@ -150,7 +156,7 @@ profiles:
         cpu:
           units: 0.25
         memory:
-          size: 256Mi
+          size: 512Mi
         storage:
           - size: 512Mi
           - name: data

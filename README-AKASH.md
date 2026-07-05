@@ -63,7 +63,7 @@ Then edit `akash/deploy.yaml` `image:` lines for `backend` and `client`.
 4. Fund the deployment with ACT (pricing block targets ~$3–5/mo; adjust `amount` if bids fail).
 5. Run Postgres migrations on first boot — the backend runs Drizzle migrate on startup.
 
-Resource budget: **~1.5GB RAM** total (512 CH + 256 PG + 128 Redis + 384 backend + 256 client).
+Resource budget: **~2GB RAM** total (512 CH + 512 PG + 128 Redis + 768 backend + 256 client + 64 caddy).
 
 ## Stripe revenue attribution
 
@@ -149,6 +149,9 @@ Rybbit is AGPL-3. If you modify this fork and let users interact with it over a 
 
 | Issue | Fix |
 |-------|-----|
+| **502 on `/api/*` (login broken)** | Backend never bound port 3001 — rebuild `rybbit-backend:akash` after the GeoLite lazy-load fix; confirm backend replica is Ready in Akash |
+| **Postgres 0 ready replicas** | Bump Postgres to 512Mi in SDL (256Mi OOMs Postgres 17 on startup); check provider logs for `Out of memory` |
+| `demo.rybbit.com` ERR_BLOCKED_BY_CLIENT | Harmless — login page globe widget + ad blocker; not your API |
 | Revenue page empty | Confirm webhook fires, metadata on checkout, signing secret set |
 | OOM on Akash | Lower ClickHouse in `clickhouse/akash-config.xml`; reduce retention |
 | Client shows no Revenue nav | Rebuild client with `NEXT_PUBLIC_REVENUE_ATTRIBUTION=true` |

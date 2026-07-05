@@ -21,12 +21,18 @@ services:
 
   postgres:
     image: postgres:17.4-alpine
-    mem_limit: 256m
+    mem_limit: 512m
     cpus: 0.25
     command:
       - postgres
       - -c
-      - shared_buffers=64MB
+      - shared_buffers=32MB
+      - -c
+      - effective_cache_size=96MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
       - -c
       - max_connections=40
 

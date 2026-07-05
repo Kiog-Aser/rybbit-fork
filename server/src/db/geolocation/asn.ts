@@ -11,19 +11,29 @@ interface AsnReader extends Reader {
 }
 
 let reader: AsnReader | null = null;
+let loadPromise: Promise<void> | null = null;
 
-async function loadDatabase() {
-  try {
-    const buf = await readFile(dbPath);
-    reader = Reader.openBuffer(buf) as AsnReader;
-    logger.info("GeoIP ASN database loaded successfully");
-  } catch (err) {
-    logger.warn({ err, dbPath }, "GeoIP ASN database not loaded — ASN-based bot detection disabled");
-    reader = null;
+function startLoad(): Promise<void> {
+  if (loadPromise) {
+    return loadPromise;
   }
+
+  loadPromise = (async () => {
+    try {
+      const buf = await readFile(dbPath);
+      reader = Reader.openBuffer(buf) as AsnReader;
+      logger.info("GeoIP ASN database loaded successfully");
+    } catch (err) {
+      logger.warn({ err, dbPath }, "GeoIP ASN database not loaded — ASN-based bot detection disabled");
+      reader = null;
+    }
+  })();
+
+  return loadPromise;
 }
 
-await loadDatabase();
+// Kick off loading in the background without blocking server startup.
+void startLoad();
 
 export interface AsnInfo {
   asn: number;
@@ -40,7 +50,6 @@ export function lookupAsn(ip: string): AsnInfo | null {
       organization: res.autonomousSystemOrganization ?? "",
     };
   } catch {
-    // Not found in DB, private/reserved range, or invalid IP.
     return null;
   }
 }

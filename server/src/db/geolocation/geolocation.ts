@@ -7,19 +7,34 @@ import { LocationResponse } from "./types.js";
 
 const dbPath = path.join(process.cwd(), "GeoLite2-City.mmdb");
 
-let reader: Reader | null = null;
-
 interface ExtendedReader extends Reader {
   city(ip: string): City;
 }
 
-async function loadDatabase(dbPath: string) {
-  const dbBuffer = await readFile(dbPath);
-  reader = Reader.openBuffer(dbBuffer);
-  logger.info("GeoIP database loaded successfully");
+let reader: ExtendedReader | null = null;
+let loadPromise: Promise<void> | null = null;
+
+function startLoad(): Promise<void> {
+  if (loadPromise) {
+    return loadPromise;
+  }
+
+  loadPromise = (async () => {
+    try {
+      const dbBuffer = await readFile(dbPath);
+      reader = Reader.openBuffer(dbBuffer) as ExtendedReader;
+      logger.info("GeoIP database loaded successfully");
+    } catch (err) {
+      logger.warn({ err, dbPath }, "GeoIP City database not loaded — geolocation disabled");
+      reader = null;
+    }
+  })();
+
+  return loadPromise;
 }
 
-await loadDatabase(dbPath);
+// Kick off loading in the background without blocking server startup.
+void startLoad();
 
 function extractLocationData(response: City | null): LocationResponse {
   if (!response) {
@@ -38,10 +53,16 @@ function extractLocationData(response: City | null): LocationResponse {
 }
 
 export async function getLocation(ips: string[]): Promise<Record<string, LocationResponse>> {
+  await startLoad();
+
   const results: Record<string, LocationResponse> = {};
   for (const ip of new Set(ips)) {
+    if (!reader) {
+      results[ip] = null;
+      continue;
+    }
     try {
-      results[ip] = extractLocationData((reader as ExtendedReader).city(ip));
+      results[ip] = extractLocationData(reader.city(ip));
     } catch {
       results[ip] = null;
     }

@@ -83,3 +83,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-caddy:${{ env.TAG }}
+
+      - name: Make GHCR packages public (required for Akash pull)
+        run: |
+          for pkg in rybbit-backend rybbit-client rybbit-caddy rybbit-clickhouse; do
+            gh api --method PATCH "/user/packages/container/${pkg}/visibility" -f visibility=public \
+              && echo "Made ${pkg} public" \
+              || echo "WARN: could not set ${pkg} public (set manually in github.com → Packages)"
+          done

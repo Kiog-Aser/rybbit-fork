@@ -33,7 +33,9 @@ done
 echo "[entrypoint] ClickHouse is ready."
 
 echo "[entrypoint] Running database migrations..."
-npm run db:migrate
+if ! npm run db:migrate; then
+  echo "[entrypoint] WARN: database migrations failed — starting app anyway (tables may already exist)"
+fi
 
 echo "[entrypoint] Starting application: $*"
 exec "$@"

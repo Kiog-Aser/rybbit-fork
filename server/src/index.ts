@@ -169,7 +169,7 @@ import {
 import { mapHeaders } from "./lib/auth-utils.js";
 import { auth } from "./lib/auth.js";
 import { createCorsOptionsDelegate, createRejectUntrustedOriginHook } from "./lib/cors.js";
-import { IS_CLOUD } from "./lib/const.js";
+import { AKASH_LEAN_MODE, IS_CLOUD } from "./lib/const.js";
 import { reengagementService } from "./services/reengagement/reengagementService.js";
 import { telemetryService } from "./services/telemetryService.js";
 import { handleIdentify } from "./services/tracker/identifyService.js";
@@ -193,35 +193,37 @@ const __dirname = dirname(__filename);
 
 const server = Fastify({
   disableRequestLogging: true,
-  logger: {
-    level: "debug",
-    transport: {
-      target: "pino-pretty",
-      level: process.env.LOG_LEVEL || "debug",
-      options: {
-        colorize: true,
-        singleLine: true,
-        translateTime: "HH:MM:ss",
-        ignore: "pid,hostname,name",
-        destination: 1, // stdout
+  logger: AKASH_LEAN_MODE
+    ? { level: process.env.LOG_LEVEL || "warn" }
+    : {
+        level: "debug",
+        transport: {
+          target: "pino-pretty",
+          level: process.env.LOG_LEVEL || "debug",
+          options: {
+            colorize: true,
+            singleLine: true,
+            translateTime: "HH:MM:ss",
+            ignore: "pid,hostname,name",
+            destination: 1,
+          },
+        },
+        serializers: {
+          req(request) {
+            return {
+              method: request.method,
+              url: request.url,
+              path: request.url,
+              parameters: request.params,
+            };
+          },
+          res(reply) {
+            return {
+              statusCode: reply.statusCode,
+            };
+          },
+        },
       },
-    },
-    serializers: {
-      req(request) {
-        return {
-          method: request.method,
-          url: request.url,
-          path: request.url,
-          parameters: request.params,
-        };
-      },
-      res(reply) {
-        return {
-          statusCode: reply.statusCode,
-        };
-      },
-    },
-  },
   maxParamLength: 1500,
   trustProxy: true,
   bodyLimit: 10 * 1024 * 1024, // 10MB limit for session replay data
@@ -485,35 +487,44 @@ server.post("/api/identify", handleIdentify);
 // Register API routes with /api prefix
 server.register(apiRoutes, { prefix: "/api" });
 
+async function runBackgroundInitialization() {
+  try {
+    await Promise.all([initializeClickhouse(), initPostgres()]);
+    try {
+      const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
+      await ensureBootstrapAdmin();
+    } catch (bootstrapError) {
+      server.log.error(
+        bootstrapError,
+        "Bootstrap admin setup failed (fix BOOTSTRAP_* env or create user manually)"
+      );
+    }
+
+    telemetryService.startTelemetryCron();
+    usageService.startUsageCheckCron();
+    if (IS_CLOUD && process.env.NODE_ENV !== "development") {
+      weeklyReportService.startWeeklyReportCron();
+      reengagementService.startReengagementCron();
+    }
+    server.log.info("Background database initialization complete");
+  } catch (initError) {
+    server.log.error(initError, "Background database initialization failed");
+  }
+}
+
 const start = async () => {
   try {
-    // When running as a cluster worker, the primary process already initialized the databases
-    if (!cluster.isWorker) {
-      await Promise.all([initializeClickhouse(), initPostgres()]);
-      try {
-        const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
-        await ensureBootstrapAdmin();
-      } catch (bootstrapError) {
-        server.log.error(
-          bootstrapError,
-          "Bootstrap admin setup failed; server will still start (fix BOOTSTRAP_* env or create user manually)"
-        );
-      }
-    }
-
-    // Cron jobs should only run on the primary process (or in single-process mode)
-    if (!cluster.isWorker) {
-      telemetryService.startTelemetryCron();
-      usageService.startUsageCheckCron();
-      if (IS_CLOUD && process.env.NODE_ENV !== "development") {
-        weeklyReportService.startWeeklyReportCron();
-        reengagementService.startReengagementCron();
-      }
-    }
-
-    // Start the server first
+    // Bind HTTP immediately so Caddy/probes see a live backend even while DB init runs.
     await server.listen({ port: 3001, host: "0.0.0.0" });
     server.log.info(`Server is listening on http://0.0.0.0:3001 (PID: ${process.pid})`);
+
+    if (!cluster.isWorker) {
+      if (AKASH_LEAN_MODE) {
+        void runBackgroundInitialization();
+      } else {
+        await runBackgroundInitialization();
+      }
+    }
 
     // Listen for IPC messages from the cluster primary process
     if (cluster.isWorker) {

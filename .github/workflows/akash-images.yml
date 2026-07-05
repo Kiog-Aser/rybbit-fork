@@ -64,7 +64,9 @@ jobs:
           file: ./client/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ env.REPO_OWNER }}/rybbit-client:${{ env.TAG }}
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER }}/rybbit-client:${{ env.TAG }}
+            ghcr.io/${{ env.REPO_OWNER }}/rybbit-client:akash-${{ env.BUILD_SHA }}
           build-args: |
             NEXT_PUBLIC_BACKEND_URL=${{ env.BASE_URL }}
             NEXT_PUBLIC_DISABLE_SIGNUP=true

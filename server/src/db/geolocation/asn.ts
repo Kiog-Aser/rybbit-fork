@@ -2,6 +2,7 @@ import type { Asn } from "@maxmind/geoip2-node";
 import { Reader } from "@maxmind/geoip2-node";
 import { readFile } from "fs/promises";
 import path from "path";
+import { DISABLE_GEOLITE } from "../../lib/const.js";
 import { logger } from "../../lib/logger/logger.js";
 
 const dbPath = path.join(process.cwd(), "GeoLite2-ASN.mmdb");
@@ -14,6 +15,10 @@ let reader: AsnReader | null = null;
 let loadPromise: Promise<void> | null = null;
 
 function startLoad(): Promise<void> {
+  if (DISABLE_GEOLITE) {
+    return Promise.resolve();
+  }
+
   if (loadPromise) {
     return loadPromise;
   }
@@ -32,16 +37,14 @@ function startLoad(): Promise<void> {
   return loadPromise;
 }
 
-// Lazy background load — first bot/pageview lookups may miss ASN until the DB is ready.
-void startLoad();
-
 export interface AsnInfo {
   asn: number;
   organization: string;
 }
 
 export function lookupAsn(ip: string): AsnInfo | null {
-  if (!reader || !ip) return null;
+  if (DISABLE_GEOLITE || !ip) return null;
+  if (!reader) return null;
   try {
     const res = reader.asn(ip);
     if (typeof res.autonomousSystemNumber !== "number") return null;

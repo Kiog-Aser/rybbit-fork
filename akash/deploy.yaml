@@ -82,6 +82,7 @@ services:
     env:
       - NODE_ENV=production
       - AKASH_LEAN_MODE=true
+      - DISABLE_GEOLITE=true
       - LITE_DASHBOARD=true
       - CLUSTER_WORKERS=0
       - DEPLOYMENT=akash

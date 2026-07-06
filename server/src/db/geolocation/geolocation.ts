@@ -2,6 +2,7 @@ import type { City } from "@maxmind/geoip2-node";
 import { Reader } from "@maxmind/geoip2-node";
 import { readFile } from "fs/promises";
 import path from "path";
+import { DISABLE_GEOLITE } from "../../lib/const.js";
 import { logger } from "../../lib/logger/logger.js";
 import { LocationResponse } from "./types.js";
 
@@ -15,6 +16,10 @@ let reader: ExtendedReader | null = null;
 let loadPromise: Promise<void> | null = null;
 
 function startLoad(): Promise<void> {
+  if (DISABLE_GEOLITE) {
+    return Promise.resolve();
+  }
+
   if (loadPromise) {
     return loadPromise;
   }

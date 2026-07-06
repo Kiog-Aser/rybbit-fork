@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Lean backend image for Akash. No Chromium; includes GeoLite for map coordinates.
+# Lean backend image for Akash. No Chromium, no GeoLite (DISABLE_GEOLITE=true in lean mode).
 
 FROM node:20-alpine AS builder
 
@@ -29,8 +29,6 @@ WORKDIR /app
 RUN apk add --no-cache postgresql-client
 
 COPY --from=builder /app/server/package*.json ./
-COPY --from=builder /app/server/GeoLite2-City.mmdb ./GeoLite2-City.mmdb
-COPY --from=builder /app/server/GeoLite2-ASN.mmdb ./GeoLite2-ASN.mmdb
 COPY --from=builder /app/server/dist ./dist
 COPY --from=builder /app/server/node_modules ./node_modules
 COPY --from=builder /app/server/docker-entrypoint.sh /docker-entrypoint.sh
@@ -44,7 +42,8 @@ RUN chmod +x /docker-entrypoint.sh
 
 ENV NODE_ENV=production
 ENV AKASH_LEAN_MODE=true
-ENV NODE_OPTIONS=--max-old-space-size=384
+ENV DISABLE_GEOLITE=true
+ENV NODE_OPTIONS=--max-old-space-size=448
 
 EXPOSE 3001
 

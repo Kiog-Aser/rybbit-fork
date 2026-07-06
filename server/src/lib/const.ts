@@ -5,6 +5,9 @@ dotenv.config();
 export const IS_CLOUD = process.env.CLOUD === "true";
 export const DEPLOYMENT = process.env.DEPLOYMENT;
 export const AKASH_LEAN_MODE = process.env.AKASH_LEAN_MODE === "true";
+/** Skip loading ~75MB GeoLite DBs into RAM — saves ~100MB+ on Akash pods. Country stays empty unless CF headers are used. */
+export const DISABLE_GEOLITE =
+  process.env.DISABLE_GEOLITE === "true" || (AKASH_LEAN_MODE && process.env.DISABLE_GEOLITE !== "false");
 export const REVENUE_ATTRIBUTION = process.env.REVENUE_ATTRIBUTION === "true" || AKASH_LEAN_MODE;
 export const BOOTSTRAP_ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || null;
 export const BOOTSTRAP_ADMIN_MODE = Boolean(BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD);

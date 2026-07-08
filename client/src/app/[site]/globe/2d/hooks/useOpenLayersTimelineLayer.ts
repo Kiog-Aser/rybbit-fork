@@ -11,6 +11,7 @@ import VectorSource from "ol/source/Vector";
 import { Circle, Fill, Style, Text } from "ol/style";
 import { useEffect, useRef, useState } from "react";
 import type { GetSessionsResponse } from "../../../../../api/analytics/endpoints";
+import { AKASH_LEAN } from "../../../../../lib/const";
 import { generateAvatarSVG } from "../../3d/hooks/timelineLayer/timelineMarkerHelpers";
 import { useActiveSessions, useTimelineStore } from "../../timelineStore";
 import { CLUSTER_MAX_ZOOM, CLUSTERING_THRESHOLD, MIN_CLUSTER_SIZE } from "../../utils/clusteringConstants";
@@ -89,10 +90,19 @@ export function useOpenLayersTimelineLayer({ mapInstanceRef, mapViewRef, mapView
       const session = tooltipSessionRef.current;
       if (!session) return;
 
-      setSelectedSession(session);
       tooltipOverlayRef.current?.setPosition(undefined);
       openTooltipSessionIdRef.current = null;
       tooltipSessionRef.current = null;
+
+      if (AKASH_LEAN) {
+        const siteSlug = window.location.pathname.split("/").filter(Boolean)[0];
+        if (siteSlug) {
+          window.location.href = `/${siteSlug}/user/${encodeURIComponent(session.user_id)}`;
+          return;
+        }
+      }
+
+      setSelectedSession(session);
     };
 
     if (!tooltipOverlayRef.current) {

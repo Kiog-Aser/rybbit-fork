@@ -2,7 +2,13 @@ import { FilterParams } from "@rybbit/shared";
 import { FastifyReply, FastifyRequest } from "fastify";
 import { clickhouse } from "../../../db/clickhouse/clickhouse.js";
 import { getTimeStatement, processResults } from "../utils/utils.js";
-import { type BotLayerKey, getBotCategoryStatement, getBotFilterStatement, getBotLayerStatement } from "./utils.js";
+import {
+  type BotLayerKey,
+  getBotCategoryStatement,
+  getBotFilterStatement,
+  getBotLayerStatement,
+  getBotPurposeExpression,
+} from "./utils.js";
 
 type BotOverviewResponse = {
   bot_requests: number;
@@ -70,9 +76,9 @@ const getQuery = (params: BotOverviewRequest["Querystring"]) => {
       category_stats AS (
         SELECT
           count() AS category_all,
-          countIf(bot_category = 'ai') AS category_ai_answers,
-          countIf(bot_category = 'search') AS category_indexing,
-          countIf(bot_category IN ('seo', 'monitoring')) AS category_training
+          countIf(${getBotPurposeExpression()} = 'ai_answers') AS category_ai_answers,
+          countIf(${getBotPurposeExpression()} = 'indexing') AS category_indexing,
+          countIf(${getBotPurposeExpression()} = 'training') AS category_training
         FROM bot_events
         WHERE site_id = {siteId:Int32}
           ${filterStatement}

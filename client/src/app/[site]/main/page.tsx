@@ -10,13 +10,17 @@ import { MainSection } from "./components/MainSection/MainSection";
 import { MainSectionLite } from "./components/MainSection/MainSectionLite";
 import { Countries } from "./components/sections/Countries";
 import { CountriesLite } from "./components/sections/CountriesLite";
+import { CrawlersLite } from "./components/sections/CrawlersLite";
 import { Devices } from "./components/sections/Devices";
 import { DevicesLite } from "./components/sections/DevicesLite";
 import { Events } from "./components/sections/Events";
+import { FunnelLite } from "./components/sections/FunnelLite";
 import { Pages } from "./components/sections/Pages";
 import { PagesLite } from "./components/sections/PagesLite";
 import { Referrers } from "./components/sections/Referrers";
+import { ReferrersLite } from "./components/sections/ReferrersLite";
 import { SearchConsole } from "./components/sections/SearchConsole";
+import { UsersLite } from "./components/sections/UsersLite";
 import { Weekdays } from "./components/sections/Weekdays";
 
 function LazySection({ children, height = "405px" }: { children: ReactNode; height?: string }) {
@@ -50,18 +54,27 @@ function MainPageContent() {
         <MainSectionLite />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
           <LazySection>
-            <PagesLite />
+            <ReferrersLite />
           </LazySection>
           <LazySection>
-            <DevicesLite />
+            <PagesLite />
           </LazySection>
           <LazySection>
             <CountriesLite />
           </LazySection>
-          <LazySection height="394px">
-            <Events />
+          <LazySection>
+            <DevicesLite />
           </LazySection>
         </div>
+        <LazySection height="360px">
+          <UsersLite />
+        </LazySection>
+        <LazySection height="280px">
+          <FunnelLite />
+        </LazySection>
+        <LazySection height="320px">
+          <CrawlersLite />
+        </LazySection>
       </div>
     );
   }

@@ -43,10 +43,10 @@ export function BotsOverview() {
                 type="button"
                 onClick={() => setSelectedCategory(pill.key)}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors border",
                   active
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                    ? "bg-foreground text-background border-transparent"
+                    : "bg-transparent text-muted-foreground border-neutral-200 dark:border-neutral-700 hover:border-neutral-300"
                 )}
               >
                 <span>{pill.label}</span>

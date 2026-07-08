@@ -1,5 +1,6 @@
 import mapboxgl from "mapbox-gl";
 import type { GetSessionsResponse } from "../../../../../../api/analytics/endpoints";
+import { AKASH_LEAN } from "../../../../../../lib/const";
 import { generateAvatarSVG } from "./timelineMarkerHelpers";
 import { getUnclusteredFeatures } from "./timelineClusterUtils";
 import { buildTooltipHTML } from "../../../utils/timelineTooltipBuilder";
@@ -65,9 +66,18 @@ export function createAvatarMarker(
     if (button) {
       button.addEventListener("click", e => {
         e.stopPropagation();
-        setSelectedSession(session);
         popupRef.current?.remove();
         openTooltipSessionIdRef.current = null;
+
+        if (AKASH_LEAN) {
+          const siteSlug = window.location.pathname.split("/").filter(Boolean)[0];
+          if (siteSlug) {
+            window.location.href = `/${siteSlug}/user/${encodeURIComponent(session.user_id)}`;
+            return;
+          }
+        }
+
+        setSelectedSession(session);
       });
     }
   };

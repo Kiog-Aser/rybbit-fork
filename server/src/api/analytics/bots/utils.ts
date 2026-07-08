@@ -62,24 +62,33 @@ export function getBotLayerStatement(layer?: string | null) {
   return column ? `AND ${column}` : "";
 }
 
-const BOT_CATEGORY_FILTERS: Record<string, BotCategoryFilter[]> = {
-  indexing: ["search"],
-  ai_answers: ["ai"],
-  training: ["seo"],
-};
+/** Classify bot traffic into indexing / ai_answers / training from stored UA patterns. */
+export function getBotPurposeExpression() {
+  return `multiIf(
+    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-searchbot|oai-searchbot|mistralai-user|youchat)'),
+      'ai_answers',
+    bot_category = 'search'
+      OR match(matched_ua_pattern, '(?i)(googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview|perplexitybot)'),
+      'indexing',
+    bot_category = 'ai'
+      OR match(matched_ua_pattern, '(?i)(gptbot|claudebot|ccbot|google-extended|bytespider|cohere-ai|diffbot|grokbot|amazonbot|applebot-extended|meta-external|openai/|claude-code|gemini|googleother)'),
+      'training',
+    ''
+  )`;
+}
+
+const BOT_PURPOSE_FILTERS = new Set(["indexing", "ai_answers", "training"]);
 
 export function getBotCategoryStatement(category?: string | null) {
   if (!category || category === "all") {
     return "";
   }
 
-  const categories = BOT_CATEGORY_FILTERS[category];
-  if (!categories?.length) {
+  if (!BOT_PURPOSE_FILTERS.has(category)) {
     return "";
   }
 
-  const escaped = categories.map(c => SqlString.escape(c)).join(", ");
-  return `AND bot_category IN (${escaped})`;
+  return `AND ${getBotPurposeExpression()} = ${SqlString.escape(category)}`;
 }
 
 const filterTypeToOperator = (type: FilterType) => {

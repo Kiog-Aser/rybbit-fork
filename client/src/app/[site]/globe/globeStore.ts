@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { MapView } from "./components/ModeSelector";
-import { IS_CLOUD } from "../../../lib/const";
+import { AKASH_LEAN, IS_CLOUD } from "../../../lib/const";
 
 interface GlobeStore {
   mapView: MapView;
@@ -14,7 +14,7 @@ interface GlobeStore {
 }
 
 export const useGlobeStore = create<GlobeStore>(set => ({
-  mapView: IS_CLOUD ? "timeline" : "coordinates",
+  mapView: IS_CLOUD || AKASH_LEAN ? "timeline" : "coordinates",
   setMapView: view => set({ mapView: view }),
   mapMode: IS_CLOUD ? "3D" : "2D",
   setMapMode: mode => set({ mapMode: mode }),

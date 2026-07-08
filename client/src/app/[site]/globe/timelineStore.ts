@@ -34,7 +34,7 @@ export const useTimelineStore = create<TimelineStore>(set => ({
   isError: false,
   hasMoreData: false,
   setCurrentTime: time => set({ currentTime: time }),
-  setTimeRange: (start, end) => set({ timeRange: { start, end }, currentTime: start }),
+  setTimeRange: (start, end) => set({ timeRange: { start, end }, currentTime: end }),
   setWindowSize: size => set({ windowSize: size }),
   setManualWindowSize: size => set({ manualWindowSize: size, windowSize: size || 60 }),
   setAllSessions: (sessions, hasMoreData) => set({ allSessions: sessions, hasMoreData }),

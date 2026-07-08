@@ -5,6 +5,7 @@ import { getTimezone } from "../../../../lib/store";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Eye, MousePointerClick } from "lucide-react";
 import { generateName } from "../../../../components/Avatar";
+import { AKASH_LEAN } from "../../../../lib/const";
 import { formatShortDuration, hour12, userLocale } from "../../../../lib/dateTimeUtils";
 import type { GetSessionsResponse } from "../../../../api/analytics/endpoints";
 import { extractDomain, getDisplayName } from "../../../../components/Channel";
@@ -102,7 +103,7 @@ export function buildTooltipHTML(session: GetSessionsResponse[number], lng: numb
         data-session-id="${session.session_id}"
         tabindex="-1"
       >
-        View Details
+        ${AKASH_LEAN ? "View journey" : "View Details"}
       </button>
     </div>
   `;

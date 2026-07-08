@@ -10,6 +10,7 @@ import { EventIcon, PageviewIcon } from "../../../../components/EventIcons";
 import { SessionsList } from "../../../../components/Sessions/SessionsList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../../components/ui/tabs";
 import { useStore } from "../../../../lib/store";
+import { FunnelGradientChart } from "./FunnelGradientChart";
 
 export type FunnelChartData = {
   stepName: string;
@@ -230,7 +231,8 @@ export function Funnel({ data, steps, isError, error, isPending }: FunnelProps) 
           </div>
         </div>
       ) : data && chartData.length > 0 ? (
-        <div className="space-y-0">
+        <div className="space-y-6">
+          <FunnelGradientChart data={data} />
           {chartData.map((step, index) => (
             <FunnelStepComponent
               key={step.stepNumber}

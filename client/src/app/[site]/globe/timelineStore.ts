@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { useMemo } from "react";
 import type { GetSessionsResponse } from "../../../api/analytics/endpoints";
 import { useStore } from "../../../lib/store";
-import { getActiveSessions } from "./timelineUtils";
+import { generateTimeWindows, getActiveSessions } from "./timelineUtils";
 
 interface TimelineStore {
   currentTime: DateTime | null;
@@ -16,6 +16,7 @@ interface TimelineStore {
   hasMoreData: boolean;
   setCurrentTime: (time: DateTime) => void;
   setTimeRange: (start: DateTime, end: DateTime) => void;
+  initializeTimeline: (start: DateTime, end: DateTime, windowSize: number) => void;
   setWindowSize: (size: number) => void;
   setManualWindowSize: (size: number | null) => void;
   setAllSessions: (sessions: GetSessionsResponse, hasMoreData: boolean) => void;
@@ -34,7 +35,17 @@ export const useTimelineStore = create<TimelineStore>(set => ({
   isError: false,
   hasMoreData: false,
   setCurrentTime: time => set({ currentTime: time }),
-  setTimeRange: (start, end) => set({ timeRange: { start, end }, currentTime: end }),
+  setTimeRange: (start, end) => {
+    const { windowSize } = useTimelineStore.getState();
+    const windows = generateTimeWindows(start, end, windowSize);
+    const currentTime = windows[windows.length - 1] ?? end;
+    set({ timeRange: { start, end }, currentTime });
+  },
+  initializeTimeline: (start, end, windowSize) => {
+    const windows = generateTimeWindows(start, end, windowSize);
+    const currentTime = windows[windows.length - 1] ?? end;
+    set({ timeRange: { start, end }, windowSize, currentTime });
+  },
   setWindowSize: size => set({ windowSize: size }),
   setManualWindowSize: size => set({ manualWindowSize: size, windowSize: size || 60 }),
   setAllSessions: (sessions, hasMoreData) => set({ allSessions: sessions, hasMoreData }),

@@ -14,7 +14,7 @@ import { CrawlersLite } from "./components/sections/CrawlersLite";
 import { Devices } from "./components/sections/Devices";
 import { DevicesLite } from "./components/sections/DevicesLite";
 import { Events } from "./components/sections/Events";
-import { FunnelLite } from "./components/sections/FunnelLite";
+
 import { Pages } from "./components/sections/Pages";
 import { PagesLite } from "./components/sections/PagesLite";
 import { Referrers } from "./components/sections/Referrers";
@@ -66,11 +66,8 @@ function MainPageContent() {
             <DevicesLite />
           </LazySection>
         </div>
-        <LazySection height="360px">
-          <UsersLite />
-        </LazySection>
         <LazySection height="280px">
-          <FunnelLite />
+          <UsersLite />
         </LazySection>
         <LazySection height="320px">
           <CrawlersLite />

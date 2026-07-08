@@ -13,11 +13,10 @@ import { MAX_PAGES, PAGE_SIZE } from "./timelineLayerConstants";
 
 export function useTimelineSessions() {
   const { time, site, timezone: storeTimezone } = useStore();
-  const { manualWindowSize, setTimeRange, setWindowSize, setAllSessions, setLoading, setError } = useTimelineStore(
+  const { manualWindowSize, initializeTimeline, setAllSessions, setLoading, setError } = useTimelineStore(
     useShallow(s => ({
       manualWindowSize: s.manualWindowSize,
-      setTimeRange: s.setTimeRange,
-      setWindowSize: s.setWindowSize,
+      initializeTimeline: s.initializeTimeline,
       setAllSessions: s.setAllSessions,
       setLoading: s.setLoading,
       setError: s.setError,
@@ -112,12 +111,8 @@ export function useTimelineSessions() {
     });
 
     if (earliest && latest) {
-      // Only auto-calculate window size if user hasn't manually set it
-      if (manualWindowSize === null) {
-        const calculatedWindowSize = calculateWindowSize(earliest, latest);
-        setWindowSize(calculatedWindowSize);
-      }
-      setTimeRange(earliest, latest);
+      const windowSize = manualWindowSize ?? calculateWindowSize(earliest, latest);
+      initializeTimeline(earliest, latest, windowSize);
     }
-  }, [allSessions, setTimeRange, setWindowSize, manualWindowSize, time, timezone]);
+  }, [allSessions, initializeTimeline, manualWindowSize, time, timezone]);
 }

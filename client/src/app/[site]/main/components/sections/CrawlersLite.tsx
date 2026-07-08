@@ -14,6 +14,7 @@ import { TimeSeriesChart, type TimeSeriesChartSeries } from "../../../../../comp
 import { getChartTimeBounds } from "../../../../../components/charts/timeSeriesChartUtils";
 import { Card, CardContent, CardLoader } from "../../../../../components/ui/card";
 import { Skeleton } from "../../../../../components/ui/skeleton";
+import { CrawlerLogo } from "../../../../../components/CrawlerLogo";
 import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../../lib/botCrawlerNames";
 import { formatChartDateTime } from "../../../../../lib/dateTimeUtils";
 import { getTimezone, useStore } from "../../../../../lib/store";
@@ -193,7 +194,7 @@ export function CrawlersLite() {
                     style={{ backgroundColor: brand.background }}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm leading-none w-4 text-center">{brand.emoji}</span>
+                      <CrawlerLogo label={label} size={16} />
                       <span className="text-xs font-medium truncate" style={{ color: brand.foreground }}>
                         {label}
                       </span>

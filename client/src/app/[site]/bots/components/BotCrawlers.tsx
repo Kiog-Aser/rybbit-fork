@@ -1,18 +1,17 @@
 "use client";
 
 import NumberFlow from "@number-flow/react";
-import { Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useExtracted } from "next-intl";
 import { useGetBotDimension } from "../../../../api/analytics/hooks/bots/useGetBotDimension";
+import { CrawlerLogo } from "../../../../components/CrawlerLogo";
 import { Card, CardContent, CardLoader } from "../../../../components/ui/card";
-import { Input } from "../../../../components/ui/input";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../lib/botCrawlerNames";
 import { useStore } from "../../../../lib/store";
 
 export function BotCrawlers() {
+  const t = useExtracted();
   const { site } = useStore();
-  const [query, setQuery] = useState("");
   const { data, isLoading, isFetching } = useGetBotDimension({
     site,
     dimension: "matched_ua_pattern",
@@ -20,32 +19,13 @@ export function BotCrawlers() {
     page: 1,
   });
 
-  const crawlers = useMemo(() => {
-    const items = data?.data?.data.filter(item => item.value && item.value !== "") ?? [];
-    const needle = query.trim().toLowerCase();
-    const filtered = needle
-      ? items.filter(item => getCrawlerDisplayName(item.value).toLowerCase().includes(needle))
-      : items;
-
-    return filtered.slice(0, 12);
-  }, [data?.data?.data, query]);
+  const crawlers = data?.data?.data.filter(item => item.value && item.value !== "") ?? [];
 
   return (
     <Card>
       {isFetching && <CardLoader />}
       <CardContent className="p-4 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">Search crawlers</h3>
-          <div className="relative w-full max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search crawlers"
-              className="pl-8 h-9"
-            />
-          </div>
-        </div>
+        <h3 className="text-sm font-semibold text-foreground">{t("Crawlers")}</h3>
 
         {isLoading ? (
           <div className="space-y-2">
@@ -55,7 +35,7 @@ export function BotCrawlers() {
           </div>
         ) : crawlers.length === 0 ? (
           <p className="text-sm text-muted-foreground py-8 text-center">
-            No crawler traffic in this period yet.
+            {t("No crawler traffic in this period yet.")}
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -69,8 +49,8 @@ export function BotCrawlers() {
                   className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5"
                   style={{ backgroundColor: brand.background }}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base leading-none">{brand.emoji}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CrawlerLogo label={label} size={18} />
                     <span className="text-sm font-medium truncate" style={{ color: brand.foreground }}>
                       {label}
                     </span>

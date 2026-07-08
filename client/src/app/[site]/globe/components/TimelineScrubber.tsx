@@ -44,7 +44,11 @@ export function TimelineScrubber() {
   const currentIndex = useMemo(() => {
     if (!currentTime || timeWindows.length === 0) return 0;
     const index = timeWindows.findIndex(w => w.equals(currentTime));
-    return index >= 0 ? index : 0;
+    if (index >= 0) return index;
+    // Snap to the nearest window (prefer the latest when currentTime is past the range)
+    const lastIndex = timeWindows.length - 1;
+    if (currentTime >= timeWindows[lastIndex]) return lastIndex;
+    return timeWindows.findIndex(w => w > currentTime) - 1 || 0;
   }, [currentTime, timeWindows]);
 
   // Sync local slider index with store (on initial load and during playback)
@@ -132,8 +136,9 @@ export function TimelineScrubber() {
   const prevWindowSizeRef = useRef(windowSize);
   useEffect(() => {
     if (prevWindowSizeRef.current !== windowSize && timeWindows.length > 0) {
-      setCurrentTime(timeWindows[0]);
-      setLocalSliderIndex(0);
+      const lastIndex = timeWindows.length - 1;
+      setCurrentTime(timeWindows[lastIndex]);
+      setLocalSliderIndex(lastIndex);
     }
     prevWindowSizeRef.current = windowSize;
   }, [windowSize, timeWindows, setCurrentTime]);

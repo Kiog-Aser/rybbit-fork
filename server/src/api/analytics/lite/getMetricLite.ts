@@ -5,12 +5,63 @@ import { getMetric } from "../getMetric.js";
 import { processResults } from "../utils/utils.js";
 import { getLiteSessionFilter, getLiteTimeStatement, hasLiteFilters } from "./utils.js";
 
-// Lite metric supports only dimensions backed by MVs:
-//   - pathname → pathname_hourly_mv_target
-//   - country → country_hourly_mv_target
-//   - device_type → device_type_hourly_mv_target
-// Other parameters return 400 — the simplified dashboard hides those sections.
-type LiteMetricParameter = "pathname" | "country" | "device_type";
+// Lite metric reads from hourly MVs where available, sessions_mv_target for
+// session-invariant dimensions, and falls back to the standard /metric query
+// for acquisition dimensions (channel, referrer).
+type LiteMetricParameter =
+  | "pathname"
+  | "country"
+  | "device_type"
+  | "browser"
+  | "operating_system"
+  | "channel"
+  | "referrer";
+
+const SESSION_MV_PARAMETERS = new Set<LiteMetricParameter>([
+  "country",
+  "device_type",
+  "browser",
+  "operating_system",
+]);
+
+function buildSessionMvMetricQuery(
+  column: string,
+  timeStatement: string,
+  nonEmptyClause: string,
+  limit: number,
+  offsetStatement: string
+): string {
+  return `
+    SELECT
+      value,
+      pageviews,
+      count,
+      round(count * 100.0 / sum(count) OVER (), 2) AS percentage,
+      round(pageviews * 100.0 / sum(pageviews) OVER (), 2) AS pageviews_percentage,
+      count() OVER () AS total_count
+    FROM (
+      SELECT
+        ${column} AS value,
+        sum(session_pageviews) AS pageviews,
+        count() AS count
+      FROM (
+        SELECT
+          session_id,
+          any(${column}) AS ${column},
+          sum(pageviews) AS session_pageviews
+        FROM sessions_mv_target
+        WHERE site_id = {siteId:Int32}
+          ${timeStatement}
+          ${nonEmptyClause}
+        GROUP BY session_id
+      )
+      GROUP BY ${column}
+    )
+    ORDER BY count DESC
+    LIMIT ${limit}
+    ${offsetStatement}
+  `;
+}
 
 type LiteMetricItem = {
   value: string;
@@ -38,6 +89,11 @@ export async function getMetricLite(
   const offsetStatement = page > 1 ? `OFFSET ${(page - 1) * limit}` : "";
   const filtersPresent = hasLiteFilters(req.query.filters);
 
+  // Acquisition dimensions need first-event semantics from raw events.
+  if (parameter === "channel" || parameter === "referrer") {
+    return getMetric(req as unknown as Parameters<typeof getMetric>[0], res);
+  }
+
   // Pull totalCount off the window column and drop it from the returned rows so
   // items match the standard /metric shape.
   const sendMetric = (data: LiteMetricItem[]) => {
@@ -53,44 +109,17 @@ export async function getMetricLite(
   // pathname list falls back to the raw-events query.
   if (filtersPresent) {
     const filter = getLiteSessionFilter(req.query.filters);
-    const sessionFastPath = filter.supported && (parameter === "country" || parameter === "device_type");
+    const sessionFastPath = filter.supported && SESSION_MV_PARAMETERS.has(parameter);
     if (!sessionFastPath) {
       return getMetric(req as unknown as Parameters<typeof getMetric>[0], res);
     }
 
     const sessionsTime = getLiteTimeStatement(req.query, "start_time");
-    const nonEmpty = parameter === "device_type" ? `AND ${parameter} <> ''` : "";
-    const query = `
-      SELECT
-        value,
-        pageviews,
-        count,
-        round(count * 100.0 / sum(count) OVER (), 2) AS percentage,
-        round(pageviews * 100.0 / sum(pageviews) OVER (), 2) AS pageviews_percentage,
-        count() OVER () AS total_count
-      FROM (
-        SELECT
-          ${parameter} AS value,
-          sum(session_pageviews) AS pageviews,
-          count() AS count
-        FROM (
-          SELECT
-            session_id,
-            any(${parameter}) AS ${parameter},
-            sum(pageviews) AS session_pageviews
-          FROM sessions_mv_target
-          WHERE site_id = {siteId:Int32}
-            ${sessionsTime}
-            ${nonEmpty}
-            ${filter.sql}
-          GROUP BY session_id
-        )
-        GROUP BY ${parameter}
-      )
-      ORDER BY count DESC
-      LIMIT ${limit}
-      ${offsetStatement}
-    `;
+    const nonEmpty =
+      parameter === "country"
+        ? `AND country <> ''`
+        : `AND ${parameter} <> ''`;
+    const query = buildSessionMvMetricQuery(parameter, sessionsTime, `${nonEmpty} ${filter.sql}`, limit, offsetStatement);
 
     try {
       const result = await clickhouse.query({
@@ -185,6 +214,9 @@ export async function getMetricLite(
       LIMIT ${limit}
       ${offsetStatement}
     `;
+  } else if (parameter === "browser" || parameter === "operating_system") {
+    const sessionsTime = getLiteTimeStatement(req.query, "start_time");
+    query = buildSessionMvMetricQuery(parameter, sessionsTime, `AND ${parameter} <> ''`, limit, offsetStatement);
   } else {
     return res.status(400).send({ error: "Lite mode does not support this parameter" });
   }

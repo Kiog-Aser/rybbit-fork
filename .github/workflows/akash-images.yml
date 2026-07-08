@@ -5,11 +5,15 @@
 name: Akash Images
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       base_url:
         description: "Public URL (no trailing slash), e.g. https://analytics.example.com"
-        required: true
+        required: false
+        default: "https://analytics.milh.tech"
         type: string
       image_tag:
         description: "Docker tag to publish"
@@ -39,8 +43,8 @@ jobs:
       - name: Set image names
         run: |
           echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
-          echo "TAG=${{ inputs.image_tag }}" >> "$GITHUB_ENV"
-          echo "BASE_URL=${{ inputs.base_url }}" >> "$GITHUB_ENV"
+          echo "TAG=${{ inputs.image_tag || 'akash' }}" >> "$GITHUB_ENV"
+          echo "BASE_URL=${{ inputs.base_url || 'https://analytics.milh.tech' }}" >> "$GITHUB_ENV"
           echo "BUILD_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Build and push backend

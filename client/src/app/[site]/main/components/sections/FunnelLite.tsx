@@ -25,9 +25,9 @@ export function FunnelLite() {
   const isLoading = funnelsLoading || dataLoading;
 
   return (
-    <Card>
+    <Card className="overflow-visible">
       {isFetching && <CardLoader />}
-      <CardContent className="p-4">
+      <CardContent className="p-4 overflow-visible">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold">{primaryFunnel?.name ?? t("Funnel")}</h3>

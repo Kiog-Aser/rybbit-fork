@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useBotsStore } from "../../../../app/[site]/bots/botsStore";
+import { useBotsStore, type BotCategoryFilter } from "../../../../app/[site]/bots/botsStore";
 import { useStore } from "../../../../lib/store";
 import { buildApiParams } from "../../../utils";
 import { type BotDimensionKey, fetchBotDimension } from "../../endpoints";
@@ -10,14 +10,17 @@ export function useGetBotDimension({
   dimension,
   limit = 100,
   page = 1,
+  category,
 }: {
   site?: number | string;
   dimension: BotDimensionKey;
   limit?: number;
   page?: number;
+  category?: BotCategoryFilter;
 }) {
   const { time, filters, timezone } = useStore();
-  const { selectedLayer, selectedCategory } = useBotsStore();
+  const { selectedLayer, selectedCategory: storeCategory } = useBotsStore();
+  const selectedCategory = category ?? storeCategory;
   const botFilters = filters.filter(filter => BOT_AVAILABLE_FILTERS.includes(filter.parameter));
   const params = buildApiParams(time, { filters: botFilters });
 

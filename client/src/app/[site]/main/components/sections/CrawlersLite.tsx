@@ -10,22 +10,27 @@ import { useGetBotDimension } from "../../../../../api/analytics/hooks/bots/useG
 import { useGetBotOverview } from "../../../../../api/analytics/hooks/bots/useGetBotOverview";
 import { useGetBotTimeSeriesByCategory } from "../../../../../api/analytics/hooks/bots/useGetBotTimeSeriesByCategory";
 import { ChartTooltip } from "../../../../../components/charts/ChartTooltip";
-import { TimeSeriesChart, type TimeSeriesChartSeries } from "../../../../../components/charts/TimeSeriesChart";
+import { TimeSeriesChart } from "../../../../../components/charts/TimeSeriesChart";
 import { getChartTimeBounds } from "../../../../../components/charts/timeSeriesChartUtils";
-import { Card, CardContent, CardLoader } from "../../../../../components/ui/card";
-import { Skeleton } from "../../../../../components/ui/skeleton";
 import { CrawlerLogo } from "../../../../../components/CrawlerLogo";
+import { CardLoader } from "../../../../../components/ui/card";
+import { Skeleton } from "../../../../../components/ui/skeleton";
 import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../../lib/botCrawlerNames";
 import { formatChartDateTime } from "../../../../../lib/dateTimeUtils";
 import { getTimezone, useStore } from "../../../../../lib/store";
-import { cn } from "../../../../../lib/utils";
-import { useBotsStore, type BotCategoryFilter } from "../../../bots/botsStore";
+import { type BotCategoryFilter } from "../../../bots/botsStore";
+import {
+  StandardSectionTabs,
+  type StandardSectionTab,
+} from "../../../components/shared/StandardSection/StandardSectionTabs";
 
-const CATEGORY_META: { key: BotCategoryFilter; label: string; color: string }[] = [
-  { key: "ai_answers", label: "AI answers", color: "hsl(var(--accent-400))" },
-  { key: "indexing", label: "Indexing", color: "#34a853" },
-  { key: "training", label: "Training", color: "#cc785c" },
-];
+type Tab = "ai_answers" | "indexing" | "training";
+
+const CATEGORY_COLORS: Record<Tab, string> = {
+  ai_answers: "hsl(var(--accent-400))",
+  indexing: "#34a853",
+  training: "#cc785c",
+};
 
 function buildPoints(
   raw: { time: string; bot_requests: number }[] | undefined,
@@ -49,166 +54,164 @@ function buildPoints(
   return points;
 }
 
-export function CrawlersLite() {
+function CrawlerCategoryPanel({ category }: { category: Tab }) {
   const t = useExtracted();
-  const { site } = useParams();
   const { site: siteId, bucket, time } = useStore();
   const timezone = getTimezone();
-  const { selectedCategory, setSelectedCategory } = useBotsStore();
+  const color = CATEGORY_COLORS[category];
 
-  const { data: overview, isLoading: overviewLoading } = useGetBotOverview({ site: siteId });
+  const { data: seriesData, isLoading: chartLoading, isFetching } = useGetBotTimeSeriesByCategory({
+    site: siteId,
+    category,
+  });
   const { data: crawlers, isLoading: crawlersLoading } = useGetBotDimension({
     site: siteId,
     dimension: "matched_ua_pattern",
-    limit: 8,
+    limit: 12,
     page: 1,
+    category,
   });
 
-  const aiAnswers = useGetBotTimeSeriesByCategory({ site: siteId, category: "ai_answers" });
-  const indexing = useGetBotTimeSeriesByCategory({ site: siteId, category: "indexing" });
-  const training = useGetBotTimeSeriesByCategory({ site: siteId, category: "training" });
-
-  const { chartMin, chartMax, max, activeSeries } = useMemo(() => {
-    const datasets = [
-      { meta: CATEGORY_META[0], data: aiAnswers.data?.data },
-      { meta: CATEGORY_META[1], data: indexing.data?.data },
-      { meta: CATEGORY_META[2], data: training.data?.data },
-    ];
-
-    const built: TimeSeriesChartSeries[] = datasets.map(({ meta, data }) => ({
-      id: meta.label,
-      color: meta.color,
-      data: buildPoints(data, time, bucket, timezone),
-    }));
-
-    const visible =
-      selectedCategory === "all" ? built : built.filter(s => s.id === CATEGORY_META.find(c => c.key === selectedCategory)?.label);
-
-    const allPoints = visible.flatMap(s => s.data);
-    const dataMin = allPoints.length ? allPoints[0].x : undefined;
-    const dataMax = allPoints.length ? allPoints[allPoints.length - 1].x : undefined;
+  const { chartMin, chartMax, max, points } = useMemo(() => {
+    const built = buildPoints(seriesData?.data, time, bucket, timezone);
+    const dataMin = built.length ? built[0].x : undefined;
+    const dataMax = built.length ? built[built.length - 1].x : undefined;
     const { min: boundsMin, max: boundsMax } = getChartTimeBounds(time, bucket, timezone);
 
     return {
-      activeSeries: visible,
+      points: built,
       chartMin: dataMin ?? boundsMin,
       chartMax: dataMax ?? boundsMax ?? DateTime.now().toJSDate(),
-      max: allPoints.reduce((largest, p) => Math.max(largest, p.y), 0),
+      max: built.reduce((largest, p) => Math.max(largest, p.y), 0),
     };
-  }, [aiAnswers.data, indexing.data, training.data, time, bucket, timezone, selectedCategory]);
-
-  const isFetching = aiAnswers.isFetching || indexing.isFetching || training.isFetching;
-  const isChartLoading = aiAnswers.isLoading || indexing.isLoading || training.isLoading;
-  const multi = selectedCategory === "all" && activeSeries.length > 1;
-
-  const pills: { key: BotCategoryFilter; label: string; count: number }[] = [
-    { key: "ai_answers", label: t("AI answers"), count: overview?.data?.category_ai_answers ?? 0 },
-    { key: "indexing", label: t("Indexing"), count: overview?.data?.category_indexing ?? 0 },
-    { key: "training", label: t("Training"), count: overview?.data?.category_training ?? 0 },
-  ];
+  }, [seriesData?.data, time, bucket, timezone]);
 
   const crawlerItems = crawlers?.data?.data?.filter(i => i.value) ?? [];
 
   return (
-    <Card>
+    <div className="relative">
       {isFetching && <CardLoader />}
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold">{t("AI crawlers")}</h3>
-          <Link href={`/${site}/bots`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-            {t("Details")}
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px] gap-3 h-[314px]">
+        <div className="h-full min-h-[180px]">
+          {chartLoading ? (
+            <Skeleton className="h-full w-full rounded-lg" />
+          ) : (
+            <TimeSeriesChart
+              current={points}
+              max={max || 1}
+              chartMin={chartMin}
+              chartMax={chartMax}
+              currentColor={color}
+              disableDragZoom
+              yTickFormat={v => Number(v).toLocaleString()}
+              renderTooltip={({ point }) => (
+                <ChartTooltip>
+                  <div className="p-3 min-w-[140px]">
+                    <div className="mb-2 text-xs">{formatChartDateTime(DateTime.fromJSDate(point.x), bucket)}</div>
+                    <div className="font-medium tabular-nums">{point.y.toLocaleString()} requests</div>
+                  </div>
+                </ChartTooltip>
+              )}
+            />
+          )}
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          {pills.map(pill => (
-            <button
-              key={pill.key}
-              type="button"
-              onClick={() => setSelectedCategory(selectedCategory === pill.key ? "all" : pill.key)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors border",
-                selectedCategory === pill.key
-                  ? "bg-foreground text-background border-transparent"
-                  : "bg-transparent text-muted-foreground border-neutral-200 dark:border-neutral-700 hover:border-neutral-300"
-              )}
-            >
-              <span>{pill.label}</span>
-              {overviewLoading ? (
-                <Skeleton className="h-4 w-6 rounded-full" />
-              ) : (
-                <NumberFlow respectMotionPreference={false} value={pill.count} format={{ notation: "compact" }} />
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4">
-          <div className="h-[180px]">
-            {isChartLoading ? (
-              <Skeleton className="h-full w-full rounded-lg" />
-            ) : (
-              <TimeSeriesChart
-                current={multi ? [] : activeSeries[0]?.data ?? []}
-                series={multi ? activeSeries : undefined}
-                max={max || 1}
-                chartMin={chartMin}
-                chartMax={chartMax}
-                currentColor={activeSeries[0]?.color ?? CATEGORY_META[0].color}
-                disableDragZoom
-                yTickFormat={v => Number(v).toLocaleString()}
-                renderTooltip={({ point, points }) => (
-                  <ChartTooltip>
-                    <div className="p-3 min-w-[140px]">
-                      <div className="mb-2 text-xs">{formatChartDateTime(DateTime.fromJSDate(point.x), bucket)}</div>
-                      {multi ? (
-                        points.map(entry => (
-                          <div key={entry.id} className="flex justify-between gap-3 text-xs">
-                            <span style={{ color: entry.color }}>{entry.id}</span>
-                            <span className="font-medium tabular-nums">{entry.point.y.toLocaleString()}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="font-medium tabular-nums">{point.y.toLocaleString()} requests</div>
-                      )}
-                    </div>
-                  </ChartTooltip>
-                )}
-              />
-            )}
-          </div>
-
-          <div className="space-y-1">
-            {crawlersLoading ? (
-              Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full rounded-md" />)
-            ) : crawlerItems.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">{t("No crawlers yet")}</p>
-            ) : (
-              crawlerItems.map(item => {
-                const label = getCrawlerDisplayName(item.value);
-                const brand = getCrawlerBrandStyle(label);
-                return (
-                  <div
-                    key={item.value}
-                    className="flex items-center justify-between gap-2 rounded-md px-2.5 py-2"
-                    style={{ backgroundColor: brand.background }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <CrawlerLogo label={label} size={16} />
-                      <span className="text-xs font-medium truncate" style={{ color: brand.foreground }}>
-                        {label}
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold tabular-nums" style={{ color: brand.foreground }}>
-                      {item.count}
+        <div className="space-y-1 overflow-y-auto max-h-[314px] pr-1">
+          {crawlersLoading ? (
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-9 w-full rounded-md" />)
+          ) : crawlerItems.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-6 text-center">{t("No crawlers yet")}</p>
+          ) : (
+            crawlerItems.map(item => {
+              const label = getCrawlerDisplayName(item.value);
+              const brand = getCrawlerBrandStyle(label);
+              return (
+                <div
+                  key={item.value}
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5"
+                  style={{ backgroundColor: brand.background }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CrawlerLogo label={label} size={16} />
+                    <span className="text-xs font-medium truncate" style={{ color: brand.foreground }}>
+                      {label}
                     </span>
                   </div>
-                );
-              })
-            )}
-          </div>
+                  <span className="text-xs font-semibold tabular-nums" style={{ color: brand.foreground }}>
+                    {item.count}
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
+  );
+}
+
+export function CrawlersLite() {
+  const t = useExtracted();
+  const { site } = useParams();
+  const { site: siteId } = useStore();
+  const { data: overview, isLoading: overviewLoading } = useGetBotOverview({ site: siteId });
+
+  const countFor = (key: BotCategoryFilter) => {
+    if (!overview?.data) return 0;
+    if (key === "ai_answers") return overview.data.category_ai_answers ?? 0;
+    if (key === "indexing") return overview.data.category_indexing ?? 0;
+    return overview.data.category_training ?? 0;
+  };
+
+  const tabLabel = (key: Tab, label: string) => (
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      {overviewLoading ? (
+        <Skeleton className="h-3.5 w-6 rounded" />
+      ) : (
+        <span className="text-muted-foreground tabular-nums">
+          <NumberFlow respectMotionPreference={false} value={countFor(key)} format={{ notation: "compact" }} />
+        </span>
+      )}
+    </span>
+  );
+
+  const tabs: StandardSectionTab<Tab>[] = [
+    {
+      value: "ai_answers",
+      label: tabLabel("ai_answers", t("AI answers")),
+      content: <CrawlerCategoryPanel category="ai_answers" />,
+      dialogContent: <CrawlerCategoryPanel category="ai_answers" />,
+      dialogTitle: t("AI answers"),
+    },
+    {
+      value: "indexing",
+      label: tabLabel("indexing", t("Indexing")),
+      content: <CrawlerCategoryPanel category="indexing" />,
+      dialogContent: <CrawlerCategoryPanel category="indexing" />,
+      dialogTitle: t("Indexing"),
+    },
+    {
+      value: "training",
+      label: tabLabel("training", t("Training")),
+      content: <CrawlerCategoryPanel category="training" />,
+      dialogContent: <CrawlerCategoryPanel category="training" />,
+      dialogTitle: t("Training"),
+    },
+  ];
+
+  return (
+    <StandardSectionTabs
+      defaultValue="ai_answers"
+      tabs={tabs}
+      renderTabsListEnd={() => (
+        <Link
+          href={`/${site}/bots`}
+          className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors pr-1"
+        >
+          {t("Details")}
+        </Link>
+      )}
+    />
   );
 }

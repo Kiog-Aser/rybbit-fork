@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { useStore } from "../../../../lib/store";
 import { useShallow } from "zustand/react/shallow";
 import { useTimelineStore, useActiveSessions } from "../timelineStore";
-import { formatTimelineTime, generateTimeWindows, getSessionCountsPerWindow } from "../timelineUtils";
+import { findWindowForTime, formatTimelineTime, generateTimeWindows, getSessionCountsPerWindow } from "../timelineUtils";
 import { MAX_PAGES, PAGE_SIZE } from "../3d/hooks/timelineLayer/timelineLayerConstants";
 
 export function TimelineScrubber() {
@@ -45,11 +45,10 @@ export function TimelineScrubber() {
     if (!currentTime || timeWindows.length === 0) return 0;
     const index = timeWindows.findIndex(w => w.equals(currentTime));
     if (index >= 0) return index;
-    // Snap to the nearest window (prefer the latest when currentTime is past the range)
-    const lastIndex = timeWindows.length - 1;
-    if (currentTime >= timeWindows[lastIndex]) return lastIndex;
-    return timeWindows.findIndex(w => w > currentTime) - 1 || 0;
-  }, [currentTime, timeWindows]);
+    const snapped = findWindowForTime(currentTime, timeWindows, windowSize);
+    const snappedIndex = timeWindows.findIndex(w => w.equals(snapped));
+    return snappedIndex >= 0 ? snappedIndex : timeWindows.length - 1;
+  }, [currentTime, timeWindows, windowSize]);
 
   // Sync local slider index with store (on initial load and during playback)
   const isInitialMount = useRef(true);

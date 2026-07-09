@@ -17,12 +17,7 @@ type LiteMetricParameter =
   | "channel"
   | "referrer";
 
-const SESSION_MV_PARAMETERS = new Set<LiteMetricParameter>([
-  "country",
-  "device_type",
-  "browser",
-  "operating_system",
-]);
+const SESSION_MV_PARAMETERS = new Set<LiteMetricParameter>(["country", "device_type"]);
 
 function buildSessionMvMetricQuery(
   column: string,
@@ -89,8 +84,14 @@ export async function getMetricLite(
   const offsetStatement = page > 1 ? `OFFSET ${(page - 1) * limit}` : "";
   const filtersPresent = hasLiteFilters(req.query.filters);
 
-  // Acquisition dimensions need first-event semantics from raw events.
-  if (parameter === "channel" || parameter === "referrer") {
+  // Acquisition + browser/OS dimensions need raw-event semantics (or are too
+  // slow on sessions_mv_target at interactive latency). Filters use /metric too.
+  if (
+    parameter === "channel" ||
+    parameter === "referrer" ||
+    parameter === "browser" ||
+    parameter === "operating_system"
+  ) {
     return getMetric(req as unknown as Parameters<typeof getMetric>[0], res);
   }
 
@@ -214,9 +215,6 @@ export async function getMetricLite(
       LIMIT ${limit}
       ${offsetStatement}
     `;
-  } else if (parameter === "browser" || parameter === "operating_system") {
-    const sessionsTime = getLiteTimeStatement(req.query, "start_time");
-    query = buildSessionMvMetricQuery(parameter, sessionsTime, `AND ${parameter} <> ''`, limit, offsetStatement);
   } else {
     return res.status(400).send({ error: "Lite mode does not support this parameter" });
   }

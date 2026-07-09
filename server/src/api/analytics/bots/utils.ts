@@ -62,16 +62,21 @@ export function getBotLayerStatement(layer?: string | null) {
   return column ? `AND ${column}` : "";
 }
 
-/** Classify bot traffic into indexing / ai_answers / training from stored UA patterns. */
+/**
+ * Classify bot traffic into indexing / ai_answers / training from stored UA patterns.
+ *
+ * Mirrors vendor split: training crawlers, retrieval/index builders, and live
+ * answer fetchers (agent). Order matters — more specific agent tokens first.
+ */
 export function getBotPurposeExpression() {
   return `multiIf(
-    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-searchbot|oai-searchbot|mistralai-user|youchat)'),
+    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-code|meta-externalfetcher|mistralai-user|youchat|manus-user)'),
       'ai_answers',
     bot_category = 'search'
-      OR match(matched_ua_pattern, '(?i)(googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview|perplexitybot)'),
+      OR match(matched_ua_pattern, '(?i)(oai-searchbot|claude-searchbot|perplexitybot|google-inspectiontool|duckassistbot|mistralai-index|googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview)'),
       'indexing',
     bot_category = 'ai'
-      OR match(matched_ua_pattern, '(?i)(gptbot|claudebot|ccbot|google-extended|bytespider|cohere-ai|diffbot|grokbot|amazonbot|applebot-extended|meta-external|openai/|claude-code|gemini|googleother)'),
+      OR match(matched_ua_pattern, '(?i)(gptbot|claudebot|ccbot|bytespider|meta-externalagent|amazonbot|anthropic-ai|cohere-ai|diffbot|grokbot|openai/|gemini|googleother)'),
       'training',
     ''
   )`;

@@ -112,7 +112,7 @@ export function useTimelineSessions() {
 
     if (earliest && latest) {
       const windowSize = manualWindowSize ?? calculateWindowSize(earliest, latest);
-      initializeTimeline(earliest, latest, windowSize);
+      initializeTimeline(earliest, latest, windowSize, latest);
     }
   }, [allSessions, initializeTimeline, manualWindowSize, time, timezone]);
 }

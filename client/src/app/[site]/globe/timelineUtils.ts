@@ -55,6 +55,24 @@ export function generateTimeWindows(startTime: DateTime, endTime: DateTime, wind
 }
 
 /**
+ * Snap a timestamp to the timeline window that contains it.
+ * Falls back to the last window when the time is past the final bucket start.
+ */
+export function findWindowForTime(time: DateTime, windows: DateTime[], windowSize: number): DateTime {
+  if (windows.length === 0) return time;
+
+  for (let i = windows.length - 1; i >= 0; i--) {
+    const windowStart = windows[i];
+    const windowEnd = i < windows.length - 1 ? windows[i + 1] : windowStart.plus({ minutes: windowSize });
+    if (time >= windowStart && time < windowEnd) {
+      return windowStart;
+    }
+  }
+
+  return windows[windows.length - 1];
+}
+
+/**
  * Check if a session overlaps with a given time window
  */
 export function sessionOverlapsWindow(

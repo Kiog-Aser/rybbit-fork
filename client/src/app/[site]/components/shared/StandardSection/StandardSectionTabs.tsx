@@ -25,6 +25,7 @@ export type StandardSectionTab<TValue extends string> = {
 
 type StandardSectionTabsProps<TValue extends string> = Omit<TabbedSectionCardProps<TValue>, "tabs"> & {
   tabs: StandardSectionTab<TValue>[];
+  expandable?: boolean;
 };
 
 export function StandardSectionTabs<TValue extends string>({ tabs, ...props }: StandardSectionTabsProps<TValue>) {

@@ -6,9 +6,7 @@ import { useInView } from "../../../hooks/useInView";
 import { useSetPageTitle } from "../../../hooks/useSetPageTitle";
 import { useStore } from "../../../lib/store";
 import { SubHeader } from "../components/SubHeader/SubHeader";
-import { BotCrawlers } from "./components/BotCrawlers";
-import { BotMultiSeriesChart } from "./components/BotMultiSeriesChart";
-import { BotsOverview } from "./components/BotsOverview";
+import { BotsCrawlersSection } from "./components/BotsCrawlersSection";
 import { BotCountries } from "./components/sections/BotCountries";
 import { BotDevices } from "./components/sections/BotDevices";
 import { BotMetadata } from "./components/sections/BotMetadata";
@@ -35,15 +33,7 @@ export default function BotsPage() {
   return (
     <div className="p-2 md:p-4 max-w-[1100px] mx-auto space-y-3">
       <SubHeader availableFilters={BOT_AVAILABLE_FILTERS} />
-      <div className="space-y-4">
-        <BotsOverview />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <div className="lg:col-span-2">
-            <BotMultiSeriesChart />
-          </div>
-          <BotCrawlers />
-        </div>
-      </div>
+      <BotsCrawlersSection />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
         <LazySection>
           <BotReferrers />

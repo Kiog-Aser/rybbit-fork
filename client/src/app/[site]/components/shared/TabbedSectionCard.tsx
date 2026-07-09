@@ -34,6 +34,8 @@ export type TabbedSectionCardProps<TValue extends string> = {
   className?: string;
   contentClassName?: string;
   dialogClassName?: string;
+  /** When false, hides the fullscreen expand control. */
+  expandable?: boolean;
   renderTabsListEnd?: (context: TabbedSectionListContext<TValue>) => ReactNode;
 };
 
@@ -43,6 +45,7 @@ export function TabbedSectionCard<TValue extends string>({
   className,
   contentClassName,
   dialogClassName,
+  expandable = true,
   renderTabsListEnd,
 }: TabbedSectionCardProps<TValue>) {
   const [value, setValue] = useState<TValue>(defaultValue);
@@ -52,7 +55,7 @@ export function TabbedSectionCard<TValue extends string>({
   const dialogTabs = useMemo(() => tabs.filter(tab => tab.dialogContent), [tabs]);
   const activeDialogTab = dialogTabs.find(tab => tab.value === value) ?? dialogTabs[0];
   const dialogValue = activeDialogTab?.value ?? value;
-  const canExpand = dialogTabs.some(tab => tab.value === value);
+  const canExpand = expandable && dialogTabs.some(tab => tab.value === value);
 
   const renderTabsList = (inDialog: boolean) => {
     const listTabs = inDialog ? dialogTabs.filter(tab => tab.showInTabs !== false) : visibleTabs;
@@ -79,14 +82,12 @@ export function TabbedSectionCard<TValue extends string>({
         <CardContent className={cn("mt-2", contentClassName)}>
           <Tabs defaultValue={defaultValue} value={value} onValueChange={nextValue => setValue(nextValue as TValue)}>
             <div className="flex flex-row gap-2 justify-between items-center">
-              <div className="overflow-x-auto">{renderTabsList(false)}</div>
-              <div className="w-7">
-                {canExpand && (
-                  <Button size="smIcon" onClick={() => setExpanded(true)} aria-label="Expand section">
-                    <Expand className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
+              <div className="overflow-x-auto min-w-0 flex-1">{renderTabsList(false)}</div>
+              {canExpand && (
+                <Button size="smIcon" onClick={() => setExpanded(true)} aria-label="Expand section">
+                  <Expand className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             {tabs.map(tab => (
               <TabsContent key={tab.value} value={tab.value}>

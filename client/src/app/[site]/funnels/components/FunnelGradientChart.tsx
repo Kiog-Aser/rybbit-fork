@@ -11,39 +11,34 @@ type FunnelGradientChartProps = {
   className?: string;
 };
 
-type SegmentGeometry = {
+type StagePoint = {
   step: FunnelResponse;
   index: number;
   x: number;
-  width: number;
-  topStart: number;
-  topEnd: number;
-  bottomStart: number;
-  bottomEnd: number;
+  halfHeight: number;
   dropoffFromPrev: number;
   stepConversion: number;
+  hoverStart: number;
+  hoverEnd: number;
 };
 
 const CHART_WIDTH = 1000;
-const CHART_HEIGHT = 160;
-const CENTER_Y = CHART_HEIGHT / 2;
-const MAX_HALF_HEIGHT = 62;
-const CORNER_RADIUS = 14;
+const CHART_HEIGHT = 148;
+const LEFT_CAP = 10;
+const CENTER_Y = 78;
+const MAX_HALF_HEIGHT = 54;
+/** Keeps zero-value stages visible as a thin persisting band. */
+const MIN_HALF_HEIGHT = 3.5;
 
-function buildSegments(data: FunnelResponse[]): SegmentGeometry[] {
-  const maxVisitors = data[0]?.visitors || 1;
-  const stepCount = data.length;
-  const segmentWidth = CHART_WIDTH / stepCount;
+function computeStagePoints(data: FunnelResponse[]): StagePoint[] {
+  const count = data.length;
+  const maxVisitors = Math.max(data[0]?.visitors ?? 0, 1);
+  const span = CHART_WIDTH - LEFT_CAP;
 
-  return data.map((step, index) => {
+  const points = data.map((step, index) => {
     const ratio = step.visitors / maxVisitors;
-    const nextRatio =
-      index < data.length - 1 ? data[index + 1].visitors / maxVisitors : Math.max(ratio * 0.35, 0.08);
-
-    const topStart = CENTER_Y - ratio * MAX_HALF_HEIGHT;
-    const bottomStart = CENTER_Y + ratio * MAX_HALF_HEIGHT;
-    const topEnd = CENTER_Y - nextRatio * MAX_HALF_HEIGHT;
-    const bottomEnd = CENTER_Y + nextRatio * MAX_HALF_HEIGHT;
+    const halfHeight = Math.max(ratio * MAX_HALF_HEIGHT, MIN_HALF_HEIGHT);
+    const x = count <= 1 ? CHART_WIDTH / 2 : LEFT_CAP + (index / (count - 1)) * span;
 
     const prev = index > 0 ? data[index - 1] : null;
     const dropoffFromPrev =
@@ -53,53 +48,97 @@ function buildSegments(data: FunnelResponse[]): SegmentGeometry[] {
     return {
       step,
       index,
-      x: index * segmentWidth,
-      width: segmentWidth,
-      topStart,
-      topEnd,
-      bottomStart,
-      bottomEnd,
+      x,
+      halfHeight,
       dropoffFromPrev,
       stepConversion,
+      hoverStart: 0,
+      hoverEnd: 0,
     };
   });
+
+  for (let i = 0; i < points.length; i++) {
+    const prevX = i > 0 ? points[i - 1].x : 0;
+    const nextX = i < points.length - 1 ? points[i + 1].x : CHART_WIDTH;
+    points[i].hoverStart = i === 0 ? 0 : (prevX + points[i].x) / 2;
+    points[i].hoverEnd = i === points.length - 1 ? CHART_WIDTH : (points[i].x + nextX) / 2;
+  }
+
+  return points;
 }
 
-function buildFunnelPath(segments: SegmentGeometry[]): string {
-  if (segments.length === 0) return "";
+/** One closed path: left cap → top Bézier chain → right tail → bottom Bézier chain → Z */
+function buildBezierFunnelPath(points: StagePoint[]): string {
+  if (points.length === 0) return "";
 
-  const topPoints = segments.flatMap((seg, i) => {
-    const x0 = seg.x;
-    const x1 = seg.x + seg.width;
-    if (i === 0) {
-      return [`M ${x0 + CORNER_RADIUS} ${seg.topStart}`, `Q ${x0} ${seg.topStart} ${x0} ${seg.topStart + CORNER_RADIUS}`];
-    }
-    return [`L ${x0} ${seg.topStart}`, `L ${x1} ${seg.topEnd}`];
-  });
+  if (points.length === 1) {
+    const p = points[0];
+    const yTop = CENTER_Y - p.halfHeight;
+    const yBot = CENTER_Y + p.halfHeight;
+    return `M 0 ${yTop} L ${CHART_WIDTH} ${yTop} L ${CHART_WIDTH} ${yBot} L 0 ${yBot} Z`;
+  }
 
-  const last = segments[segments.length - 1];
-  const endX = last.x + last.width;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const yTop0 = CENTER_Y - first.halfHeight;
+  const yBot0 = CENTER_Y + first.halfHeight;
+  const yTopN = CENTER_Y - last.halfHeight;
+  const yBotN = CENTER_Y + last.halfHeight;
 
-  const bottomPoints = [...segments]
-    .reverse()
-    .flatMap((seg, reverseIndex) => {
-      const i = segments.length - 1 - reverseIndex;
-      const x0 = seg.x;
-      const x1 = seg.x + seg.width;
-      if (reverseIndex === 0) {
-        return [`L ${endX} ${seg.bottomEnd}`, `L ${x0} ${seg.bottomStart}`];
-      }
-      return [`L ${x1} ${segments[i + 1].bottomEnd}`, `L ${x0} ${seg.bottomStart}`];
-    });
+  const parts: string[] = [
+    `M 0 ${yTop0}`,
+    `L ${first.x} ${yTop0}`,
+  ];
 
-  const first = segments[0];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const xMid = (p1.x + p2.x) / 2;
+    const y1 = CENTER_Y - p1.halfHeight;
+    const y2 = CENTER_Y - p2.halfHeight;
+    parts.push(`C ${xMid} ${y1} ${xMid} ${y2} ${p2.x} ${y2}`);
+  }
+
+  parts.push(`L ${CHART_WIDTH} ${yTopN}`);
+  parts.push(`L ${CHART_WIDTH} ${yBotN}`);
+  parts.push(`L ${last.x} ${yBotN}`);
+
+  for (let i = points.length - 1; i > 0; i--) {
+    const p1 = points[i];
+    const p2 = points[i - 1];
+    const xMid = (p2.x + p1.x) / 2;
+    const y1 = CENTER_Y + p1.halfHeight;
+    const y2 = CENTER_Y + p2.halfHeight;
+    parts.push(`C ${xMid} ${y1} ${xMid} ${y2} ${p2.x} ${y2}`);
+  }
+
+  parts.push(`L 0 ${yBot0}`);
+  parts.push("Z");
+
+  return parts.join(" ");
+}
+
+function segmentHighlightPath(seg: StagePoint, next: StagePoint | undefined): string {
+  const x0 = seg.hoverStart;
+  const x1 = seg.hoverEnd;
+  const yTop0 = CENTER_Y - seg.halfHeight;
+  const yBot0 = CENTER_Y + seg.halfHeight;
+
+  if (!next) {
+    const yTop1 = yTop0;
+    const yBot1 = yBot0;
+    return `M ${x0} ${yTop0} L ${x1} ${yTop1} L ${x1} ${yBot1} L ${x0} ${yBot0} Z`;
+  }
+
+  const xMid = (seg.x + next.x) / 2;
+  const yTop1 = CENTER_Y - next.halfHeight;
+  const yBot1 = CENTER_Y + next.halfHeight;
+
   return [
-    ...topPoints,
-    `L ${endX} ${last.topEnd}`,
-    `L ${endX} ${last.bottomEnd}`,
-    ...bottomPoints,
-    `L ${first.x} ${first.bottomStart}`,
-    `Q ${first.x} ${first.bottomStart} ${first.x + CORNER_RADIUS} ${first.bottomStart}`,
+    `M ${x0} ${yTop0}`,
+    `C ${xMid} ${yTop0} ${xMid} ${yTop1} ${x1} ${yTop1}`,
+    `L ${x1} ${yBot1}`,
+    `C ${xMid} ${yBot1} ${xMid} ${yBot0} ${x0} ${yBot0}`,
     "Z",
   ].join(" ");
 }
@@ -108,18 +147,19 @@ export function FunnelGradientChart({ data, className }: FunnelGradientChartProp
   const t = useExtracted();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const segments = useMemo(() => buildSegments(data), [data]);
-  const funnelPath = useMemo(() => buildFunnelPath(segments), [segments]);
+  const points = useMemo(() => computeStagePoints(data), [data]);
+  const funnelPath = useMemo(() => buildBezierFunnelPath(points), [points]);
 
   if (!data.length) return null;
 
   const lastStep = data[data.length - 1];
   const totalConversion = lastStep?.conversion_rate ?? 0;
-  const hovered = hoveredIndex !== null ? segments[hoveredIndex] : null;
+  const hovered = hoveredIndex !== null ? points[hoveredIndex] : null;
+  const hoveredNext = hoveredIndex !== null && hoveredIndex < points.length - 1 ? points[hoveredIndex + 1] : undefined;
 
   return (
     <div className={cn("relative", className)}>
-      <div className="flex items-start justify-between mb-5">
+      <div className="flex items-start justify-between mb-4">
         <div />
         <div className="text-right">
           <div className="text-3xl font-semibold tabular-nums">
@@ -134,82 +174,83 @@ export function FunnelGradientChart({ data, className }: FunnelGradientChartProp
         </div>
       </div>
 
-      <div className="relative">
+      <div className="relative pt-7">
+        {/* Drop labels sit above the funnel in clear space */}
+        <div className="absolute top-0 left-0 right-0 h-6 pointer-events-none">
+          {points.map(
+            seg =>
+              seg.index > 0 &&
+              seg.dropoffFromPrev > 0 && (
+                <div
+                  key={`drop-${seg.step.step_number}`}
+                  className={cn(
+                    "absolute -translate-x-1/2 text-[10px] font-medium tabular-nums text-red-400 transition-opacity",
+                    hoveredIndex !== null && hoveredIndex !== seg.index && "opacity-40"
+                  )}
+                  style={{ left: `${(seg.x / CHART_WIDTH) * 100}%` }}
+                >
+                  -{seg.dropoffFromPrev.toFixed(1)}%
+                </div>
+              )
+          )}
+        </div>
+
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-          className="w-full h-[140px]"
+          className="w-full h-[132px]"
           preserveAspectRatio="none"
           role="img"
           aria-label={t("Funnel chart")}
         >
           <defs>
             <linearGradient id="funnelBody" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="hsl(var(--accent-400))" stopOpacity="0.95" />
-              <stop offset="55%" stopColor="hsl(var(--accent-400))" stopOpacity="0.55" />
-              <stop offset="100%" stopColor="hsl(var(--accent-400))" stopOpacity="0.12" />
+              <stop offset="0%" stopColor="hsl(var(--accent-400))" stopOpacity="0.92" />
+              <stop offset="50%" stopColor="hsl(var(--accent-400))" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="hsl(var(--accent-400))" stopOpacity="0.14" />
             </linearGradient>
-            <filter id="funnelSoftGlow" x="-10%" y="-10%" width="120%" height="120%">
-              <feGaussianBlur stdDeviation="2" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
           </defs>
 
           <path
             d={funnelPath}
             fill="url(#funnelBody)"
             stroke="hsl(var(--accent-400))"
-            strokeOpacity="0.25"
+            strokeOpacity="0.2"
             strokeWidth="1"
-            filter="url(#funnelSoftGlow)"
           />
-
-          {segments.map((seg, index) => (
-            <rect
-              key={seg.step.step_number}
-              x={seg.x}
-              y={0}
-              width={seg.width}
-              height={CHART_HEIGHT}
-              fill="transparent"
-              className="cursor-pointer"
-              onMouseEnter={() => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-            />
-          ))}
 
           {hovered && (
             <path
-              d={(() => {
-                const seg = hovered;
-                const x0 = seg.x;
-                const x1 = seg.x + seg.width;
-                return [
-                  `M ${x0} ${seg.topStart}`,
-                  `L ${x1} ${seg.topEnd}`,
-                  `L ${x1} ${seg.bottomEnd}`,
-                  `L ${x0} ${seg.bottomStart}`,
-                  "Z",
-                ].join(" ");
-              })()}
+              d={segmentHighlightPath(hovered, hoveredNext)}
               fill="hsl(var(--accent-400))"
-              fillOpacity="0.22"
+              fillOpacity="0.18"
               stroke="hsl(var(--accent-400))"
-              strokeOpacity="0.5"
-              strokeWidth="1.5"
+              strokeOpacity="0.35"
+              strokeWidth="1"
               pointerEvents="none"
             />
           )}
+
+          {points.map(seg => (
+            <rect
+              key={seg.step.step_number}
+              x={seg.hoverStart}
+              y={0}
+              width={seg.hoverEnd - seg.hoverStart}
+              height={CHART_HEIGHT}
+              fill="transparent"
+              className="cursor-pointer"
+              onMouseEnter={() => setHoveredIndex(seg.index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            />
+          ))}
         </svg>
 
         {hovered && (
           <div
             className="pointer-events-none absolute z-10 min-w-[180px] rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg px-3 py-2.5 text-xs"
             style={{
-              left: `${((hovered.x + hovered.width / 2) / CHART_WIDTH) * 100}%`,
-              top: "8px",
+              left: `${(hovered.x / CHART_WIDTH) * 100}%`,
+              top: "28px",
               transform: "translateX(-50%)",
             }}
           >
@@ -239,24 +280,19 @@ export function FunnelGradientChart({ data, className }: FunnelGradientChartProp
       </div>
 
       <div
-        className="grid gap-1 mt-4"
+        className="grid gap-1 mt-3"
         style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
       >
-        {segments.map(seg => (
+        {points.map(seg => (
           <div
             key={seg.step.step_number}
             className={cn(
-              "min-w-0 text-center px-1 py-1 rounded-md transition-colors",
+              "min-w-0 text-center px-1 py-1 rounded-md transition-colors cursor-default",
               hoveredIndex === seg.index && "bg-neutral-100 dark:bg-neutral-800/60"
             )}
             onMouseEnter={() => setHoveredIndex(seg.index)}
             onMouseLeave={() => setHoveredIndex(null)}
           >
-            {seg.index > 0 && seg.dropoffFromPrev > 0 && (
-              <div className="text-[10px] font-medium text-red-400 mb-0.5 tabular-nums">
-                -{seg.dropoffFromPrev.toFixed(1)}%
-              </div>
-            )}
             <div className="text-base font-semibold tabular-nums">{seg.step.visitors.toLocaleString()}</div>
             <div
               className="text-[11px] text-muted-foreground leading-tight mt-0.5 truncate"

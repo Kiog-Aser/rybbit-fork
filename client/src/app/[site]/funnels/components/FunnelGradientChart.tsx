@@ -26,10 +26,8 @@ const CHART_WIDTH = 1000;
 const CHART_HEIGHT = 156;
 const CENTER_Y = 82;
 const MAX_HALF_HEIGHT = 56;
-/** Minimum visible band for zero/near-zero steps (~12px total thickness). */
-const MIN_HALF_HEIGHT = 6;
-/** Hold each stage's width across this fraction of its column before tapering. */
-const PLATEAU_FRACTION = 0.58;
+/** Minimum visible band for zero/near-zero steps (~8px total thickness). */
+const MIN_HALF_HEIGHT = 4;
 
 function halfHeightFor(visitors: number, maxVisitors: number) {
   const ratio = visitors / maxVisitors;
@@ -63,8 +61,8 @@ function computeStagePoints(data: FunnelResponse[]): StagePoint[] {
 }
 
 /**
- * Each stage column: flat plateau at that stage's width, then a cubic taper into the next.
- * One closed path — top left→right, bottom right→left.
+ * One continuous SVG path with horizontal-tangent cubic Bézier segments between stages.
+ * For each adjacent pair (x1,h1)→(x2,h2): C xMid,y1 xMid,y2 x2,y2 — sigmoid "neck" taper.
  */
 function buildBezierFunnelPath(points: StagePoint[]): string {
   const n = points.length;
@@ -73,6 +71,7 @@ function buildBezierFunnelPath(points: StagePoint[]): string {
   const yTop = (i: number) => CENTER_Y - points[i].halfHeight;
   const yBot = (i: number) => CENTER_Y + points[i].halfHeight;
   const segmentWidth = CHART_WIDTH / n;
+  const xAt = (i: number) => i * segmentWidth;
 
   if (n === 1) {
     return `M 0 ${yTop(0)} L ${CHART_WIDTH} ${yTop(0)} L ${CHART_WIDTH} ${yBot(0)} L 0 ${yBot(0)} Z`;
@@ -80,34 +79,22 @@ function buildBezierFunnelPath(points: StagePoint[]): string {
 
   const top: string[] = [`M 0 ${yTop(0)}`];
 
-  for (let i = 0; i < n; i++) {
-    const xStart = i * segmentWidth;
-    const xEnd = (i + 1) * segmentWidth;
-    const xPlateauEnd = xStart + segmentWidth * PLATEAU_FRACTION;
-
-    top.push(`L ${xPlateauEnd} ${yTop(i)}`);
-
-    if (i < n - 1) {
-      const xMid = (xPlateauEnd + xEnd) / 2;
-      top.push(`C ${xMid} ${yTop(i)} ${xMid} ${yTop(i + 1)} ${xEnd} ${yTop(i + 1)}`);
-    } else {
-      top.push(`L ${CHART_WIDTH} ${yTop(i)}`);
-    }
+  for (let i = 0; i < n - 1; i++) {
+    const x1 = xAt(i);
+    const x2 = xAt(i + 1);
+    const xMid = (x1 + x2) / 2;
+    top.push(`C ${xMid} ${yTop(i)} ${xMid} ${yTop(i + 1)} ${x2} ${yTop(i + 1)}`);
   }
+
+  top.push(`L ${CHART_WIDTH} ${yTop(n - 1)}`);
 
   const bottom: string[] = [`L ${CHART_WIDTH} ${yBot(n - 1)}`];
 
-  for (let i = n - 1; i >= 0; i--) {
-    const xStart = i * segmentWidth;
-    const xEnd = (i + 1) * segmentWidth;
-    const xPlateauEnd = xStart + segmentWidth * PLATEAU_FRACTION;
-
-    bottom.push(`L ${xPlateauEnd} ${yBot(i)}`);
-
-    if (i > 0) {
-      const xMid = (xPlateauEnd + xStart) / 2;
-      bottom.push(`C ${xMid} ${yBot(i)} ${xMid} ${yBot(i - 1)} ${xStart} ${yBot(i - 1)}`);
-    }
+  for (let i = n - 1; i > 0; i--) {
+    const x1 = xAt(i);
+    const x2 = xAt(i - 1);
+    const xMid = (x1 + x2) / 2;
+    bottom.push(`C ${xMid} ${yBot(i)} ${xMid} ${yBot(i - 1)} ${x2} ${yBot(i - 1)}`);
   }
 
   bottom.push(`L 0 ${yBot(0)}`, "Z");

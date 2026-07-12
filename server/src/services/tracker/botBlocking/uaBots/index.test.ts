@@ -39,6 +39,15 @@ describe("classifyUA", () => {
     }
   });
 
+  it("recognizes OpenAI's current search and ads crawlers", () => {
+    for (const userAgent of [
+      "Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)",
+      "Mozilla/5.0 (compatible; OAI-AdsBot/1.0; +https://openai.com/adsbot)",
+    ]) {
+      expect(classifyUA(userAgent)).toMatchObject({ isBot: true, category: "ai" });
+    }
+  });
+
   it("categorizes search-engine crawlers as search", () => {
     const searchBots = [
       "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",

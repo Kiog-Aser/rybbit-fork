@@ -29,6 +29,7 @@ interface BotBlockingPayload {
 interface BotBlockingInput {
   request: FastifyRequest;
   blockBots: boolean;
+  recordBotTraffic?: boolean;
   trustedServerSideIngestion?: boolean;
   /**
    * App/mobile site. The UA-pattern and header-heuristic layers are
@@ -186,6 +187,7 @@ function getClientSignalResult(payload: BotBlockingPayload, userAgent: string) {
 export async function checkBotBlocking({
   request,
   blockBots,
+  recordBotTraffic = false,
   trustedServerSideIngestion = false,
   isMobileSite = false,
   payload,
@@ -194,7 +196,7 @@ export async function checkBotBlocking({
   const clientSignalResult = getClientSignalResult(payload, userAgent);
   recordBotBlockingRequest(clientSignalResult.scoreForStats, clientSignalResult.maskForStats);
 
-  if (!blockBots || trustedServerSideIngestion) {
+  if ((!blockBots && !recordBotTraffic) || trustedServerSideIngestion) {
     return null;
   }
 

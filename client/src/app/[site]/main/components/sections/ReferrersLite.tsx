@@ -1,8 +1,8 @@
 "use client";
 
 import { useExtracted } from "next-intl";
-import { ChannelIcon } from "../../../../../components/Channel";
 import { Favicon } from "../../../../../components/Favicon";
+import { ChannelDonut } from "./ChannelDonut";
 import {
   StandardSectionTabs,
   type StandardSectionTab,
@@ -17,19 +17,8 @@ export function ReferrersLite() {
     {
       value: "channels",
       label: t("Channels"),
-      section: {
-        filterParameter: "channel",
-        title: t("Channels"),
-        getValue: e => e.value,
-        getKey: e => e.value,
-        getLabel: e => (
-          <div className="flex items-center gap-2">
-            <ChannelIcon channel={e.value} />
-            {e.value || t("Direct")}
-          </div>
-        ),
-        lite: true,
-      },
+      content: <ChannelDonut />,
+      dialogContent: <ChannelDonut />,
     },
     {
       value: "referrers",

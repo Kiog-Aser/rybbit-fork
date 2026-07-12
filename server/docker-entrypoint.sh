@@ -13,19 +13,9 @@ run_migrations() {
 # Akash: never block container start on ClickHouse/Postgres — the Node app binds
 # port 3001 immediately and initializes databases in the background.
 if [ "${AKASH_LEAN_MODE:-}" = "true" ] || [ "${SKIP_ENTRYPOINT_WAITS:-}" = "true" ]; then
-  echo "[entrypoint] Fast start mode — launching app now, migrations in background"
-  (
-    attempt=0
-    until pg_isready -h "${POSTGRES_HOST:-postgres}" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-frog}" -d "${POSTGRES_DB:-analytics}" -q; do
-      attempt=$((attempt + 1))
-      if [ "$attempt" -ge 300 ]; then
-        echo "[entrypoint] WARN: PostgreSQL not ready after 600s — Node will retry migrations"
-        exit 0
-      fi
-      sleep 2
-    done
-    run_migrations
-  ) &
+  # The Node process owns migration retries in fast-start mode. Running the
+  # shell migration here as well races Drizzle's migration lock with Node.
+  echo "[entrypoint] Fast start mode — launching app; Node will run migrations"
   echo "[entrypoint] Starting application: $*"
   exec "$@"
 fi

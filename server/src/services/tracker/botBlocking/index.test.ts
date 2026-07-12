@@ -57,6 +57,21 @@ describe("checkBotBlocking", () => {
     expect(result).toBeNull();
   });
 
+  it("records a crawler when blocking is disabled if bot traffic recording is enabled", async () => {
+    const userAgent = "Mozilla/5.0 (compatible; OAI-SearchBot/1.0)";
+    const result = await checkBotBlocking({
+      request: requestWithHeaders({ "user-agent": userAgent }),
+      blockBots: false,
+      recordBotTraffic: true,
+      payload: { ...basePayload, userAgent, clientBotScore: 0 },
+    });
+
+    expect(result).toMatchObject({
+      isBot: true,
+      eventProperties: { detectedUaPattern: true, botCategory: "ai" },
+    });
+  });
+
   it("skips verified trusted server-side ingestion requests", async () => {
     const result = await checkBotBlocking({
       request: requestWithHeaders({}),

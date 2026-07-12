@@ -13,6 +13,7 @@ import {
   Globe2,
   LayoutDashboard,
   LayoutGrid,
+  Lightbulb,
   MousePointerClick,
   Rewind,
   Settings,
@@ -82,6 +83,12 @@ function SidebarContent() {
           active={isActiveTab("main")}
           href={getTabPath("main")}
           icon={<LayoutDashboard className="w-4 h-4" />}
+        />
+        <SidebarComponents.Item
+          label={t("Insights")}
+          active={isActiveTab("insights")}
+          href={getTabPath("insights")}
+          icon={<Lightbulb className="w-4 h-4" />}
         />
         <SidebarComponents.Item
           label={t("Globe")}

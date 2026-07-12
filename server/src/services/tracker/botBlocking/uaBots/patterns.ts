@@ -225,9 +225,10 @@ export const BOT_PATTERNS: BotPattern[] = [
 export const EXTRA_BOT_PATTERNS: BotPattern[] = [
   // AI training / retrieval crawlers
   { pattern: "^openai/", category: "ai" },
+  { pattern: "\\boai-adsbot\\b", category: "ai" },
+  { pattern: "\\boai-searchbot\\b", category: "ai" },
   { pattern: "^claude-code/", category: "ai" },
   { pattern: "\\bgptbot\\b", category: "ai" },
-  { pattern: "\\boai-searchbot\\b", category: "ai" },
   { pattern: "\\bchatgpt-user\\b", category: "ai" },
   { pattern: "\\bclaudebot\\b", category: "ai" },
   { pattern: "\\bclaude-user\\b", category: "ai" },

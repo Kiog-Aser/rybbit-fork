@@ -20,7 +20,7 @@ import { PagesLite } from "./components/sections/PagesLite";
 import { Referrers } from "./components/sections/Referrers";
 import { ReferrersLite } from "./components/sections/ReferrersLite";
 import { SearchConsole } from "./components/sections/SearchConsole";
-import { SessionsLite } from "./components/sections/SessionsLite";
+import { ActivityLite } from "./components/sections/ActivityLite";
 import { Weekdays } from "./components/sections/Weekdays";
 
 function LazySection({ children, height = "405px" }: { children: ReactNode; height?: string }) {
@@ -66,8 +66,8 @@ function MainPageContent() {
             <DevicesLite />
           </LazySection>
         </div>
-        <LazySection height="400px">
-          <SessionsLite />
+        <LazySection height="405px">
+          <ActivityLite />
         </LazySection>
         <LazySection height="405px">
           <CrawlersLite />

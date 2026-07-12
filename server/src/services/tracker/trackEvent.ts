@@ -292,6 +292,7 @@ export async function trackEvent(request: FastifyRequest, reply: FastifyReply) {
     const botDetectionResult = await checkBotBlocking({
       request,
       blockBots: siteConfiguration.blockBots,
+      recordBotTraffic: true,
       trustedServerSideIngestion,
       isMobileSite: siteConfiguration.type === "mobile",
       payload: {

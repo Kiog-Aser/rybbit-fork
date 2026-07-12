@@ -34,13 +34,7 @@ const VISIBLE_ROWS = 4;
 const ROW_HEIGHT_PX = 88;
 const FETCH_COUNT = 20;
 
-function SessionPreviewCard({
-  session,
-  onClick,
-}: {
-  session: GetSessionsResponse[number];
-  onClick: () => void;
-}) {
+function SessionPreviewCard({ session, onClick }: { session: GetSessionsResponse[number]; onClick: () => void }) {
   const t = useExtracted();
   const { hour12, formatDateTime } = useDateTimeFormat();
   const start = DateTime.fromSQL(session.session_start, { zone: "utc" });
@@ -122,17 +116,18 @@ function SessionPreviewCard({
   );
 }
 
-export function SessionsLite() {
+export function SessionsLite({ embedded = false }: { embedded?: boolean }) {
   const t = useExtracted();
   const { site } = useParams();
   const [selectedSession, setSelectedSession] = useState<GetSessionsResponse[number] | null>(null);
   const { data, isLoading, isFetching } = useGetSessions({ page: 1, limit: FETCH_COUNT });
 
   const sessions = useMemo(() => data?.data ?? [], [data?.data]);
+  const Wrapper = embedded ? "div" : Card;
 
   return (
     <>
-      <Card>
+      <Wrapper className={embedded ? "" : undefined}>
         {isFetching && <CardLoader />}
         <CardContent className="p-0">
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100 dark:border-neutral-800">
@@ -171,7 +166,7 @@ export function SessionsLite() {
             </ScrollArea>
           )}
         </CardContent>
-      </Card>
+      </Wrapper>
 
       <Dialog open={!!selectedSession} onOpenChange={open => !open && setSelectedSession(null)}>
         <VisuallyHidden>

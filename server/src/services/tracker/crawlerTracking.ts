@@ -20,12 +20,19 @@ function isDocumentRequest(request: FastifyRequest): boolean {
   return !DOCUMENT_EXTENSIONS.test(path);
 }
 
-export async function recordCrawlerRequest(request: FastifyRequest): Promise<void> {
-  if (!isDocumentRequest(request)) return;
+export function shouldRecordCrawlerRequest(request: FastifyRequest): boolean {
+  if (!isDocumentRequest(request)) return false;
 
   const userAgent = typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : "";
   const classification = classifyUA(userAgent);
-  if (!classification.isBot || !["ai", "search"].includes(classification.category || "")) return;
+  return Boolean(classification.isBot && ["ai", "search"].includes(classification.category || ""));
+}
+
+export async function recordCrawlerRequest(request: FastifyRequest): Promise<void> {
+  if (!shouldRecordCrawlerRequest(request)) return;
+
+  const userAgent = typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : "";
+  const classification = classifyUA(userAgent);
 
   const hostname = request.hostname.toLowerCase().replace(/:\d+$/, "");
   const configuration = await siteConfig.getConfigByDomain(hostname);

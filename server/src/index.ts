@@ -178,7 +178,7 @@ import { reengagementService } from "./services/reengagement/reengagementService
 import { telemetryService } from "./services/telemetryService.js";
 import { handleIdentify } from "./services/tracker/identifyService.js";
 import { trackEvent } from "./services/tracker/trackEvent.js";
-import { recordCrawlerRequest } from "./services/tracker/crawlerTracking.js";
+import { recordCrawlerRequest, shouldRecordCrawlerRequest } from "./services/tracker/crawlerTracking.js";
 import { usageService } from "./services/usageService.js";
 import { weeklyReportService } from "./services/weekyReports/weeklyReportService.js";
 import { handleAppSumoWebhook, activateAppSumoLicense } from "./api/as/index.js";
@@ -238,8 +238,18 @@ server.register(cors, {
   delegator: createCorsOptionsDelegate(),
 });
 server.addHook("onRequest", createRejectUntrustedOriginHook());
-server.addHook("onRequest", request => {
-  void recordCrawlerRequest(request).catch(error => request.log.error(error, "Failed to record crawler request"));
+
+// Record AI/search crawler page fetches after the response is sent. An onRequest
+// hook here blocked the entire Fastify pipeline (including /api/health).
+server.addHook("onResponse", (request, _reply, done) => {
+  if (shouldRecordCrawlerRequest(request)) {
+    setImmediate(() => {
+      void recordCrawlerRequest(request).catch(error => {
+        server.log.error(error, "Failed to record crawler request");
+      });
+    });
+  }
+  done();
 });
 
 // Serve static files

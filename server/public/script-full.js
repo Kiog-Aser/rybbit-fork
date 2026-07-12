@@ -696,9 +696,10 @@
       }
     }
     getFirstTouchAttribution(url) {
-      const querystring = this.config.trackQuerystring ? url.search : "";
+      const rawQuerystring = url.search;
+      const querystring = this.config.trackQuerystring ? rawQuerystring : "";
       const referrer = document.referrer || "";
-      const params = new URLSearchParams(querystring);
+      const params = new URLSearchParams(rawQuerystring);
       const attributionParams = new URLSearchParams();
       for (const [key, value] of params.entries()) {
         const normalizedKey = key.toLowerCase();

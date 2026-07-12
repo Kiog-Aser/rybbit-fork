@@ -134,9 +134,12 @@ export class Tracker {
   }
 
   private getFirstTouchAttribution(url: URL): { querystring: string; referrer: string } {
-    const querystring = this.config.trackQuerystring ? url.search : "";
+    const rawQuerystring = url.search;
+    const querystring = this.config.trackQuerystring ? rawQuerystring : "";
     const referrer = document.referrer || "";
-    const params = new URLSearchParams(querystring);
+    // Campaign parameters are attribution data, not arbitrary URL content. Keep
+    // them even when the site disables collection of the full query string.
+    const params = new URLSearchParams(rawQuerystring);
     const attributionParams = new URLSearchParams();
 
     for (const [key, value] of params.entries()) {

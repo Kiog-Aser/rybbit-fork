@@ -20,8 +20,10 @@ export class Tracker {
   private errorDedupeCache: Map<string, number> = new Map();
   private errorDedupeLastCleanup = 0;
   private exposedFeatureFlags = new Set<string>();
+  private readonly attributionStorageKey: string;
   constructor(config: ScriptConfig) {
     this.config = config;
+    this.attributionStorageKey = `${config.namespace}-first-touch-attribution`;
     this.loadUserId();
 
     if (config.enableSessionReplay) {
@@ -131,6 +133,54 @@ export class Tracker {
     }
   }
 
+  private getFirstTouchAttribution(url: URL): { querystring: string; referrer: string } {
+    const rawQuerystring = url.search;
+    const querystring = this.config.trackQuerystring ? rawQuerystring : "";
+    const referrer = document.referrer || "";
+    // Campaign parameters are attribution data, not arbitrary URL content. Keep
+    // them even when the site disables collection of the full query string.
+    const params = new URLSearchParams(rawQuerystring);
+    const attributionParams = new URLSearchParams();
+
+    for (const [key, value] of params.entries()) {
+      const normalizedKey = key.toLowerCase();
+      if (normalizedKey.startsWith("utm_") || normalizedKey === "gclid" || normalizedKey === "gad_source") {
+        attributionParams.set(key, value);
+      }
+    }
+
+    let externalReferrer = "";
+    try {
+      const referrerUrl = referrer ? new URL(referrer) : null;
+      if (referrerUrl && referrerUrl.hostname !== url.hostname) externalReferrer = referrer;
+    } catch {
+      // Ignore malformed referrer values.
+    }
+
+    const current = {
+      querystring: attributionParams.toString() ? `?${attributionParams.toString()}` : "",
+      referrer: externalReferrer,
+    };
+
+    if (current.querystring || current.referrer) {
+      try {
+        sessionStorage.setItem(this.attributionStorageKey, JSON.stringify(current));
+      } catch {
+        // Storage may be unavailable in privacy-restricted browser contexts.
+      }
+      return current;
+    }
+
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(this.attributionStorageKey) || "null");
+      if (stored && typeof stored.querystring === "string" && typeof stored.referrer === "string") return stored;
+    } catch {
+      // Ignore malformed or unavailable storage.
+    }
+
+    return { querystring, referrer };
+  }
+
   createBasePayload(): BasePayload | null {
     const url = new URL(window.location.href);
     let pathname = url.pathname;
@@ -151,16 +201,17 @@ export class Tracker {
       pathname = maskMatch;
     }
 
+    const attribution = this.getFirstTouchAttribution(url);
     const payload: BasePayload = {
       site_id: this.config.siteId,
       hostname: url.hostname,
       pathname: pathname,
-      querystring: this.config.trackQuerystring ? url.search : "",
+      querystring: attribution.querystring || (this.config.trackQuerystring ? url.search : ""),
       screenWidth: screen.width,
       screenHeight: screen.height,
       language: navigator.language,
       page_title: document.title,
-      referrer: document.referrer,
+      referrer: attribution.referrer || document.referrer,
       _bs: getBotScore(),
       _bsm: getBotSignalMask(),
     };

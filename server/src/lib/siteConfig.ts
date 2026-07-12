@@ -1,4 +1,4 @@
-import { eq, type SQL } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/postgres/postgres.js";
 import { sites } from "../db/postgres/schema.js";
 import { matchesCIDR, matchesRange } from "./ipUtils.js";
@@ -139,6 +139,11 @@ class SiteConfig {
   async getConfig(siteIdOrId?: string | number): Promise<SiteConfigData | undefined> {
     if (!siteIdOrId) return undefined;
     return this.getSiteByAnyId(siteIdOrId);
+  }
+  async getConfigByDomain(hostname: string): Promise<SiteConfigData | undefined> {
+    const normalized = hostname.toLowerCase().replace(/:\d+$/, "");
+    const site = await this.querySiteConfig(sql`lower(${sites.domain}) = ${normalized}`);
+    return site ? this.getSiteByAnyId(site.siteId) : undefined;
   }
 
   async updateConfig(siteIdOrId: number | string, config: Partial<SiteConfigData>): Promise<void> {

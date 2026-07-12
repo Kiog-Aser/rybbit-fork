@@ -178,6 +178,17 @@ describe("Tracker", () => {
       expect(payload?.querystring).toBe("");
     });
 
+    it("should preserve AI campaign attribution when full querystrings are disabled", () => {
+      config.trackQuerystring = false;
+      mockLocation.search = "?utm_source=perplexity&utm_medium=ai&private_token=redacted";
+      mockLocation.href = `https://example.com/page${mockLocation.search}`;
+      tracker = new Tracker(config);
+
+      const payload = tracker.createBasePayload();
+
+      expect(payload?.querystring).toBe("?utm_source=perplexity&utm_medium=ai");
+    });
+
     it("should include user ID when set", () => {
       vi.mocked(window.localStorage.getItem).mockReturnValue("user-123");
       tracker = new Tracker(config);

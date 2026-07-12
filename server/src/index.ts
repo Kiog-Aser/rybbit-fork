@@ -178,6 +178,7 @@ import { reengagementService } from "./services/reengagement/reengagementService
 import { telemetryService } from "./services/telemetryService.js";
 import { handleIdentify } from "./services/tracker/identifyService.js";
 import { trackEvent } from "./services/tracker/trackEvent.js";
+import { recordCrawlerRequest } from "./services/tracker/crawlerTracking.js";
 import { usageService } from "./services/usageService.js";
 import { weeklyReportService } from "./services/weekyReports/weeklyReportService.js";
 import { handleAppSumoWebhook, activateAppSumoLicense } from "./api/as/index.js";
@@ -237,6 +238,9 @@ server.register(cors, {
   delegator: createCorsOptionsDelegate(),
 });
 server.addHook("onRequest", createRejectUntrustedOriginHook());
+server.addHook("onRequest", request => {
+  void recordCrawlerRequest(request).catch(error => request.log.error(error, "Failed to record crawler request"));
+});
 
 // Serve static files
 server.register(fastifyStatic, {
@@ -527,9 +531,7 @@ server.post("/api/identify", handleIdentify);
 server.register(apiRoutes, { prefix: "/api" });
 
 async function ensureAkashAuthReady(): Promise<void> {
-  const { runMigrationsWithRetry, ensureBootstrapAdminWithRetry } = await import(
-    "./db/postgres/migrateWithRetry.js"
-  );
+  const { runMigrationsWithRetry, ensureBootstrapAdminWithRetry } = await import("./db/postgres/migrateWithRetry.js");
   await runMigrationsWithRetry();
   await ensureBootstrapAdminWithRetry();
 }
@@ -554,10 +556,7 @@ async function runBackgroundInitialization() {
         const { ensureBootstrapAdmin } = await import("./lib/bootstrapAdmin.js");
         await ensureBootstrapAdmin();
       } catch (bootstrapError) {
-        server.log.error(
-          bootstrapError,
-          "Bootstrap admin setup failed (fix BOOTSTRAP_* env or create user manually)"
-        );
+        server.log.error(bootstrapError, "Bootstrap admin setup failed (fix BOOTSTRAP_* env or create user manually)");
       }
     }
 

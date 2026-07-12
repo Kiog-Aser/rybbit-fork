@@ -70,7 +70,7 @@ export function getBotLayerStatement(layer?: string | null) {
  */
 export function getBotPurposeExpression() {
   return `multiIf(
-    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-code|meta-externalfetcher|mistralai-user|youchat|manus-user)'),
+    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-code|meta-externalfetcher|mistralai-user|google-agent|google-cloudvertexbot|google-notebooklm|youchat|manus-user)'),
       'ai_answers',
     bot_category = 'search'
       OR match(matched_ua_pattern, '(?i)(oai-searchbot|claude-searchbot|perplexitybot|google-inspectiontool|duckassistbot|mistralai-index|googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview)'),

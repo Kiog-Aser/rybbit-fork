@@ -12,7 +12,7 @@ import { buildApiParams } from "../../../../../api/utils";
 import { ChannelIcon, getDisplayName } from "../../../../../components/Channel";
 import { ChartTooltip } from "../../../../../components/charts/ChartTooltip";
 import { Favicon } from "../../../../../components/Favicon";
-import { useStore } from "../../../../../lib/store";
+import { addFilter, removeFilter, useStore } from "../../../../../lib/store";
 import { cn, formatter } from "../../../../../lib/utils";
 import { CARD_PALETTE } from "../../../dashboards/utils";
 
@@ -157,6 +157,81 @@ function ChannelHoverPanel({
   );
 }
 
+function ChannelMobileList({
+  items,
+  directLabel,
+  isLoading,
+  emptyLabel,
+}: {
+  items: { value: string; count: number; percentage: number }[];
+  directLabel: string;
+  isLoading: boolean;
+  emptyLabel: string;
+}) {
+  const filters = useStore(state => state.filters);
+
+  function toggleChannelFilter(channel: string) {
+    const found = filters.find(f => f.parameter === "channel" && f.value.includes(channel));
+    if (found) {
+      removeFilter(found);
+    } else {
+      addFilter({ parameter: "channel", value: [channel], type: "equals" });
+    }
+  }
+
+  if (isLoading && items.length === 0) {
+    return (
+      <div className="space-y-2 px-1 pt-1">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="h-6 animate-pulse rounded-md bg-neutral-100 dark:bg-neutral-850" />
+        ))}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return <p className="px-2 py-4 text-sm text-neutral-500">{emptyLabel}</p>;
+  }
+
+  return (
+    <div className="space-y-0">
+      {items.map(item => {
+        const channel = item.value || "Direct";
+        const label = item.value || directLabel;
+        return (
+          <div
+            key={channel}
+            role="button"
+            tabIndex={0}
+            className="relative flex h-6 cursor-pointer items-center hover:bg-neutral-150/50 dark:hover:bg-neutral-850"
+            onClick={() => toggleChannelFilter(channel)}
+            onKeyDown={event => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleChannelFilter(channel);
+              }
+            }}
+          >
+            <div
+              className="absolute inset-0 rounded-md bg-dataviz opacity-25"
+              style={{ width: `${Math.round(item.percentage * 100)}%` }}
+            />
+            <div className="z-10 mx-2 flex w-full items-center justify-between gap-2 text-xs">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <ChannelIcon channel={channel} className="h-4 w-4 shrink-0" />
+                <span className="truncate text-neutral-700 dark:text-neutral-200">{label}</span>
+              </div>
+              <span className="shrink-0 tabular-nums font-medium text-neutral-900 dark:text-neutral-100">
+                {formatter(item.count)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChannelDonut() {
   const t = useExtracted();
   const directLabel = t("Direct");
@@ -168,6 +243,11 @@ export function ChannelDonut() {
   const slices = useMemo(
     () => buildSlices(data?.data ?? [], directLabel),
     [data?.data, directLabel]
+  );
+
+  const mobileItems = useMemo(
+    () => [...(data?.data ?? [])].sort((a, b) => b.count - a.count),
+    [data?.data]
   );
 
   const total = useMemo(() => slices.reduce((sum, slice) => sum + slice.count, 0), [slices]);
@@ -261,8 +341,18 @@ export function ChannelDonut() {
   }
 
   return (
-    <div className="flex h-[350px] flex-col gap-3 sm:flex-row sm:gap-6">
-      <div ref={wrapperRef} className="relative mx-auto min-h-[180px] w-full max-w-[220px] flex-1 sm:mx-0 sm:max-w-none">
+    <>
+      <div className="h-[350px] overflow-y-auto sm:hidden">
+        <ChannelMobileList
+          items={mobileItems}
+          directLabel={directLabel}
+          isLoading={isLoading}
+          emptyLabel={t("No channel data available")}
+        />
+      </div>
+
+      <div className="hidden h-[350px] sm:flex sm:flex-row sm:gap-6">
+      <div ref={wrapperRef} className="relative min-h-[180px] w-full max-w-[220px] flex-1 sm:mx-0 sm:max-w-none">
         {isLoading && total === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="h-36 w-36 animate-pulse rounded-full border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-850" />
@@ -379,6 +469,7 @@ export function ChannelDonut() {
           );
         })}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

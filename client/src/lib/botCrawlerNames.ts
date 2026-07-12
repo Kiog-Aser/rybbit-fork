@@ -3,7 +3,7 @@ const CRAWLER_LABELS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /gptbot|oai-searchbot|openai/i, label: "OpenAI" },
   { pattern: /claudebot|claude-user|claude-searchbot|claude-code|anthropic/i, label: "Anthropic" },
   { pattern: /perplexitybot|perplexity-user|perplexity/i, label: "Perplexity" },
-  { pattern: /googlebot|google-extended|googleother|google-inspectiontool/i, label: "Google" },
+  { pattern: /googlebot|google-extended|googleother|google-agent|google-cloudvertexbot|google-notebooklm|google-inspectiontool/i, label: "Google" },
   { pattern: /bingbot|bingpreview/i, label: "Bing" },
   { pattern: /duckduckbot|duckduckgo/i, label: "DuckDuckGo" },
   { pattern: /yandexbot|yandex/i, label: "Yandex" },

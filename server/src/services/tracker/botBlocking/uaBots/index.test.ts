@@ -26,6 +26,8 @@ describe("classifyUA", () => {
       "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
       "Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
       "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)",
+      "Mozilla/5.0 (compatible; Google-CloudVertexBot; +https://developers.google.com/search/docs/crawling-indexing/overview)",
+      "Mozilla/5.0 (compatible; Google-NotebookLM; +https://support.google.com/webmasters/answer/1061943)",
       "Mozilla/5.0 (compatible; Bytespider; spider-feedback@bytedance.com) AppleWebKit/537.36",
       "CCBot/2.0 (https://commoncrawl.org/faq/)",
       "Mozilla/5.0 (compatible; meta-externalagent/1.1; +https://developers.facebook.com/docs/sharing/webmasters/crawler)",

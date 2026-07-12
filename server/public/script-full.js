@@ -598,6 +598,7 @@
       this.errorDedupeLastCleanup = 0;
       this.exposedFeatureFlags = /* @__PURE__ */ new Set();
       this.config = config;
+      this.attributionStorageKey = `${config.namespace}-first-touch-attribution`;
       this.loadUserId();
       if (config.enableSessionReplay) {
         this.initializeSessionReplay();
@@ -694,6 +695,41 @@
         throw error;
       }
     }
+    getFirstTouchAttribution(url) {
+      const querystring = this.config.trackQuerystring ? url.search : "";
+      const referrer = document.referrer || "";
+      const params = new URLSearchParams(querystring);
+      const attributionParams = new URLSearchParams();
+      for (const [key, value] of params.entries()) {
+        const normalizedKey = key.toLowerCase();
+        if (normalizedKey.startsWith("utm_") || normalizedKey === "gclid" || normalizedKey === "gad_source") {
+          attributionParams.set(key, value);
+        }
+      }
+      let externalReferrer = "";
+      try {
+        const referrerUrl = referrer ? new URL(referrer) : null;
+        if (referrerUrl && referrerUrl.hostname !== url.hostname) externalReferrer = referrer;
+      } catch {
+      }
+      const current = {
+        querystring: attributionParams.toString() ? `?${attributionParams.toString()}` : "",
+        referrer: externalReferrer
+      };
+      if (current.querystring || current.referrer) {
+        try {
+          sessionStorage.setItem(this.attributionStorageKey, JSON.stringify(current));
+        } catch {
+        }
+        return current;
+      }
+      try {
+        const stored = JSON.parse(sessionStorage.getItem(this.attributionStorageKey) || "null");
+        if (stored && typeof stored.querystring === "string" && typeof stored.referrer === "string") return stored;
+      } catch {
+      }
+      return { querystring, referrer };
+    }
     createBasePayload() {
       const url = new URL(window.location.href);
       let pathname = url.pathname;
@@ -707,16 +743,17 @@
       if (maskMatch) {
         pathname = maskMatch;
       }
+      const attribution = this.getFirstTouchAttribution(url);
       const payload = {
         site_id: this.config.siteId,
         hostname: url.hostname,
         pathname,
-        querystring: this.config.trackQuerystring ? url.search : "",
+        querystring: attribution.querystring || (this.config.trackQuerystring ? url.search : ""),
         screenWidth: screen.width,
         screenHeight: screen.height,
         language: navigator.language,
         page_title: document.title,
-        referrer: document.referrer,
+        referrer: attribution.referrer || document.referrer,
         _bs: getBotScore(),
         _bsm: getBotSignalMask()
       };

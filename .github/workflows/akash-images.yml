@@ -20,10 +20,17 @@ on:
         required: false
         default: akash
         type: string
+      deploy_production:
+        description: "After build, SSH deploy to production droplet (requires DEPLOY_HOST + DEPLOY_SSH_KEY secrets)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      build_sha: ${{ steps.names.outputs.build_sha }}
     permissions:
       contents: read
       packages: write
@@ -41,11 +48,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set image names
+        id: names
         run: |
           echo "REPO_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
           echo "TAG=${{ inputs.image_tag || 'akash' }}" >> "$GITHUB_ENV"
           echo "BASE_URL=${{ inputs.base_url || 'https://analytics.milh.tech' }}" >> "$GITHUB_ENV"
           echo "BUILD_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "build_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
@@ -77,6 +86,7 @@ jobs:
             NEXT_PUBLIC_LITE_DASHBOARD=true
             NEXT_PUBLIC_DEPLOYMENT=akash
             NEXT_PUBLIC_REVENUE_ATTRIBUTION=true
+            NEXT_PUBLIC_FORK_REPO=${{ github.repository }}
 
       - name: Build and push clickhouse
         uses: docker/build-push-action@v6
@@ -105,3 +115,25 @@ jobs:
               && echo "Made ${pkg} public" \
               || echo "WARN: could not set ${pkg} public (set manually in github.com → Packages)"
           done
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_production == true
+    steps:
+      - name: Deploy to production droplet
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER || 'root' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /rybbit
+            SHA="${{ needs.build-and-push.outputs.build_sha }}"
+            OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+            sed -i.bak -E "s|ghcr.io/${OWNER}/rybbit-backend:akash-[a-f0-9]+|ghcr.io/${OWNER}/rybbit-backend:akash-${SHA}|g" docker-compose.yml
+            sed -i.bak -E "s|ghcr.io/${OWNER}/rybbit-client:akash-[a-f0-9]+|ghcr.io/${OWNER}/rybbit-client:akash-${SHA}|g" docker-compose.yml
+            docker compose pull backend client
+            docker compose up -d --no-deps backend client
+            docker compose ps backend client

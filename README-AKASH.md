@@ -139,6 +139,29 @@ Sidebar → **Bots** (enabled when `REVENUE_ATTRIBUTION` or cloud). Uses upstrea
 
 Rybbit is AGPL-3. If you modify this fork and let users interact with it over a network, you must offer corresponding source. For private analytics on your own sites, typical self-host use is fine — keep a fork URL or source offer if you expose it publicly.
 
+## Updating safely
+
+Upstream Rybbit (e.g. **v2.7.0** on Rybbit Cloud) is **not** what your self-hosted fork runs. The “update available” toast used to compare against `app.rybbit.io` — that is disabled when `NEXT_PUBLIC_FORK_REPO` is set (Akash Images CI sets this automatically).
+
+### Pull upstream without losing fork work
+
+1. **GitHub Actions** → **Sync upstream** → enter tag (e.g. `v2.7.0`) → opens a PR.
+2. Or locally: `./akash/sync-upstream.sh v2.7.0`
+3. Fork-only paths in `akash/fork-overlay.paths` auto-resolve on conflict; review shared files (`server/src/index.ts`, `package.json`, auth).
+4. Merge PR to `master` → **Akash Images** builds `akash-<sha>` tags.
+
+### Go live on the droplet
+
+Building images does **not** deploy by itself. After CI succeeds:
+
+```bash
+./akash/deploy-droplet.sh <7-char-sha>   # e.g. cdc74d5
+```
+
+Or **Actions → Akash Images → Run workflow** with **Deploy production** checked (requires repo secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY`).
+
+Immutable tags: always use `akash-<git-sha>`, not mutable `akash` or `akash-v2`.
+
 ## What's not in this fork yet
 
 - Auto-generated “insights” (rule-based or LLM)

@@ -1,0 +1,31 @@
+# Fork-owned paths: auto-resolve merge conflicts with "ours" during sync-upstream.sh.
+# Shared files (e.g. server/src/index.ts) may still need manual merge for security fixes.
+akash/
+clickhouse/akash-config.xml
+docker-compose.akash.yml
+.env.akash.example
+README-AKASH.md
+server/Dockerfile.akash
+client/src/lib/botCrawlerNames.ts
+client/public/crawlers/
+client/src/app/[site]/main/components/MainSection/MainSectionLite.tsx
+client/src/app/[site]/main/components/MainSection/OverviewLite.tsx
+client/src/app/[site]/main/components/sections/ActivityLite.tsx
+client/src/app/[site]/main/components/sections/ChannelDonut.tsx
+client/src/app/[site]/main/components/sections/CountriesLite.tsx
+client/src/app/[site]/main/components/sections/CrawlersLite.tsx
+client/src/app/[site]/main/components/sections/DevicesLite.tsx
+client/src/app/[site]/main/components/sections/FunnelLite.tsx
+client/src/app/[site]/main/components/sections/PagesLite.tsx
+client/src/app/[site]/main/components/sections/ReferrersLite.tsx
+client/src/app/[site]/main/components/sections/SessionsLite.tsx
+client/src/app/[site]/main/components/sections/UsersLite.tsx
+client/src/app/[site]/components/crawlers/
+client/src/api/revenue/
+server/src/api/revenue/
+server/src/services/revenue/
+server/src/lib/revenueEncryption.ts
+server/src/api/analytics/lite/
+server/src/scripts/backfillLiteDashboardMVs.ts
+server/src/services/tracker/crawlerTracking.ts
+server/src/services/tracker/crawlerTracking.test.ts

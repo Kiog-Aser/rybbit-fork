@@ -58,5 +58,6 @@ akash/deploy.local.yaml
 .github/
 !.github/workflows/
 !.github/workflows/akash-images.yml
+!.github/workflows/sync-upstream.yml
 
 .impeccable/critique

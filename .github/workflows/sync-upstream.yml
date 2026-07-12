@@ -1,0 +1,94 @@
+# Opens a PR that merges an upstream Rybbit release into this fork.
+# Actions → "Sync upstream" → Run workflow → enter tag (e.g. v2.7.0)
+
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream tag to merge (e.g. v2.7.0)"
+        required: true
+        default: "v2.7.0"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/rybbit-io/rybbit.git || true
+          git fetch upstream --tags
+
+      - name: Merge upstream
+        id: merge
+        run: |
+          TAG="${{ inputs.upstream_tag }}"
+          BRANCH="sync/${TAG}-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          set +e
+          git merge "upstream/$TAG" -m "Merge upstream $TAG into fork"
+          MERGE_STATUS=$?
+          set -e
+          if [[ "$MERGE_STATUS" -ne 0 ]]; then
+            while IFS= read -r path || [[ -n "$path" ]]; do
+              [[ -z "$path" || "$path" =~ ^# ]] && continue
+              if git ls-files -u -- "$path" 2>/dev/null | grep -q .; then
+                git checkout --ours -- "$path" 2>/dev/null || true
+                git add -- "$path" 2>/dev/null || true
+              fi
+            done < akash/fork-overlay.paths
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "manual_conflicts=true" >> "$GITHUB_OUTPUT"
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+            git commit --no-edit
+          fi
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="${TAG#v}"
+            node -e "
+              const fs = require('fs');
+              for (const pkg of ['client/package.json', 'server/package.json']) {
+                const j = JSON.parse(fs.readFileSync(pkg, 'utf8'));
+                j.version = '$VERSION';
+                fs.writeFileSync(pkg, JSON.stringify(j, null, 2) + '\n');
+              }
+            "
+            git add client/package.json server/package.json
+            git diff --cached --quiet || git commit -m "Bump package version to $VERSION after upstream merge"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push -u origin "${{ steps.merge.outputs.branch }}"
+          gh pr create \
+            --title "Merge upstream ${{ inputs.upstream_tag }}" \
+            --body "$(cat <<EOF
+Automated upstream sync for **${{ inputs.upstream_tag }}**.
+
+Fork overlay paths were auto-resolved with **ours**. Review shared files (especially \`server/src/index.ts\`, auth, tracker) before merging.
+
+After merge: **Akash Images** builds on master → deploy with \`./akash/deploy-droplet.sh <sha>\` or Actions **Akash Images** with **Deploy production** checked.
+EOF
+)" \
+            --base master \
+            --head "${{ steps.merge.outputs.branch }}"

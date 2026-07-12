@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useExtracted } from "next-intl";
-import { IS_CLOUD } from "../../lib/const";
+import { FORK_REPO, IS_CLOUD } from "../../lib/const";
 import { useWhiteLabel } from "../../hooks/useIsWhiteLabel";
 import { HeartIcon } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -200,7 +200,11 @@ export function Footer({ disabled = false }: FooterProps) {
             <div className="flex items-center gap-4 text-sm text-neutral-500 dark:text-neutral-400">
               <span>{t("© {year} Rybbit. All rights reserved.", { year: String(new Date().getFullYear()) })}</span>
               <Link
-                href={`https://github.com/rybbit-io/rybbit/releases/tag/v${APP_VERSION}`}
+                href={
+                  FORK_REPO
+                    ? `https://github.com/${FORK_REPO}`
+                    : `https://github.com/rybbit-io/rybbit/releases/tag/v${APP_VERSION}`
+                }
                 className="hover:text-neutral-700 dark:hover:text-neutral-300"
               >
                 v{APP_VERSION}

@@ -508,20 +508,11 @@ async function apiRoutes(fastify: FastifyInstance) {
   await fastify.register(revenueRoutes);
   await fastify.register(stripeAdminRoutes);
 
-  // Health check — lean mode also verifies Postgres (auth needs migrated tables).
-  fastify.get("/health", { logLevel: "silent" }, async (_: FastifyRequest, reply: FastifyReply) => {
-    if (!AKASH_LEAN_MODE) {
-      return reply.send("OK");
-    }
-    try {
-      const { sql } = await import("drizzle-orm");
-      const { db } = await import("./db/postgres/postgres.js");
-      await db.execute(sql`SELECT 1`);
-      return reply.send("OK");
-    } catch {
-      return reply.status(503).send("DB not ready");
-    }
-  });
+  // Health is a liveness check. In lean mode the server binds before the
+  // asynchronous Postgres migration/bootstrap work completes, so coupling
+  // this endpoint to database readiness causes the container to be marked
+  // unhealthy and restarted before authentication can become available.
+  fastify.get("/health", { logLevel: "silent" }, (_: FastifyRequest, reply: FastifyReply) => reply.send("OK"));
 }
 
 server.post("/api/track", trackEvent);

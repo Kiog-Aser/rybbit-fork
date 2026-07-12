@@ -1,6 +1,7 @@
 "use client";
 
 import * as d3 from "d3";
+import round from "lodash/round";
 import { useExtracted } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,18 +13,18 @@ import { buildApiParams } from "../../../../../api/utils";
 import { ChannelIcon, getDisplayName } from "../../../../../components/Channel";
 import { ChartTooltip } from "../../../../../components/charts/ChartTooltip";
 import { Favicon } from "../../../../../components/Favicon";
-import { addFilter, removeFilter, useStore } from "../../../../../lib/store";
-import { cn, formatter } from "../../../../../lib/utils";
+import { useStore } from "../../../../../lib/store";
+import { formatter } from "../../../../../lib/utils";
 import { CARD_PALETTE } from "../../../dashboards/utils";
+import { StandardSection } from "../../../components/shared/StandardSection/StandardSection";
 
-const MAX_SLICES = 7;
+const MAX_SLICES = 6;
 
 type ChannelSlice = {
   value: string;
   label: string;
   count: number;
-  percentage: number;
-  /** Channel names rolled into an "Other" slice */
+  share: number;
   members?: string[];
 };
 
@@ -44,37 +45,42 @@ function sliceColor(channel: string, index: number): string {
   return CHANNEL_COLORS[channel] ?? CARD_PALETTE[index % CARD_PALETTE.length];
 }
 
+function sharePercent(count: number, total: number): number {
+  return total > 0 ? round((count / total) * 100, 1) : 0;
+}
+
 function buildSlices(
-  items: { value: string; count: number; percentage: number }[],
+  items: { value: string; count: number }[],
   directLabel: string
 ): ChannelSlice[] {
   const sorted = [...items].sort((a, b) => b.count - a.count);
+  const total = sorted.reduce((sum, item) => sum + item.count, 0);
+
   if (sorted.length <= MAX_SLICES) {
     return sorted.map(item => ({
       value: item.value || "Direct",
       label: item.value || directLabel,
       count: item.count,
-      percentage: item.percentage,
+      share: sharePercent(item.count, total),
     }));
   }
 
   const visible = sorted.slice(0, MAX_SLICES - 1);
   const rest = sorted.slice(MAX_SLICES - 1);
   const otherCount = rest.reduce((sum, item) => sum + item.count, 0);
-  const otherPercentage = rest.reduce((sum, item) => sum + item.percentage, 0);
 
   return [
     ...visible.map(item => ({
       value: item.value || "Direct",
       label: item.value || directLabel,
       count: item.count,
-      percentage: item.percentage,
+      share: sharePercent(item.count, total),
     })),
     {
       value: "Other",
       label: "Other",
       count: otherCount,
-      percentage: otherPercentage,
+      share: sharePercent(otherCount, total),
       members: rest.map(item => item.value || "Direct"),
     },
   ];
@@ -89,15 +95,17 @@ function ChannelHoverPanel({
   directLabel,
   topSourcesLabel,
   breakdownLabel,
+  totalVisitors,
 }: {
   slice: ChannelSlice;
   color: string;
-  sources: { value: string; count: number; percentage: number }[];
+  sources: { value: string; count: number }[];
   isLoadingSources: boolean;
-  otherBreakdown: { value: string; count: number; percentage: number }[];
+  otherBreakdown: { value: string; count: number }[];
   directLabel: string;
   topSourcesLabel: string;
   breakdownLabel: string;
+  totalVisitors: number;
 }) {
   const showReferrers = slice.value !== "Other";
   const list = showReferrers ? sources : otherBreakdown;
@@ -108,7 +116,6 @@ function ChannelHoverPanel({
       <div className="px-3 py-2.5">
         <div className="mb-2 flex items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-          <ChannelIcon channel={slice.value === "Other" ? "Unknown" : slice.value} className="h-3.5 w-3.5" />
           <span className="truncate text-xs font-medium text-neutral-900 dark:text-neutral-100">{slice.label}</span>
         </div>
         <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -116,7 +123,7 @@ function ChannelHoverPanel({
             {formatter(slice.count)}
           </span>
           <span className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-            {Math.round(slice.percentage * 100)}%
+            {sharePercent(slice.count, totalVisitors)}%
           </span>
         </div>
         <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
@@ -133,7 +140,10 @@ function ChannelHoverPanel({
               const isChannelRow = !showReferrers;
               const name = isChannelRow ? domain || directLabel : domain ? getDisplayName(domain) : directLabel;
               return (
-                <li key={(isChannelRow ? "ch:" : "ref:") + (domain || directLabel)} className="flex items-center justify-between gap-2">
+                <li
+                  key={(isChannelRow ? "ch:" : "ref:") + (domain || directLabel)}
+                  className="flex items-center justify-between gap-2"
+                >
                   <span className="flex min-w-0 items-center gap-1.5">
                     {isChannelRow ? (
                       <ChannelIcon channel={domain || "Direct"} className="h-3.5 w-3.5 shrink-0" />
@@ -145,7 +155,7 @@ function ChannelHoverPanel({
                     <span className="truncate text-xs text-neutral-600 dark:text-neutral-300">{name}</span>
                   </span>
                   <span className="shrink-0 text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-                    {Math.round(source.percentage * 100)}%
+                    {sharePercent(source.count, slice.count)}%
                   </span>
                 </li>
               );
@@ -157,80 +167,38 @@ function ChannelHoverPanel({
   );
 }
 
-function ChannelMobileList({
-  items,
-  directLabel,
-  isLoading,
-  emptyLabel,
-}: {
-  items: { value: string; count: number; percentage: number }[];
-  directLabel: string;
-  isLoading: boolean;
-  emptyLabel: string;
-}) {
-  const filters = useStore(state => state.filters);
-
-  function toggleChannelFilter(channel: string) {
-    const found = filters.find(f => f.parameter === "channel" && f.value.includes(channel));
-    if (found) {
-      removeFilter(found);
-    } else {
-      addFilter({ parameter: "channel", value: [channel], type: "equals" });
-    }
-  }
-
-  if (isLoading && items.length === 0) {
-    return (
-      <div className="space-y-2 px-1 pt-1">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-6 animate-pulse rounded-md bg-neutral-100 dark:bg-neutral-850" />
-        ))}
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return <p className="px-2 py-4 text-sm text-neutral-500">{emptyLabel}</p>;
-  }
+function ChannelsMobileSection() {
+  const t = useExtracted();
 
   return (
-    <div className="space-y-0">
-      {items.map(item => {
-        const channel = item.value || "Direct";
-        const label = item.value || directLabel;
-        return (
-          <div
-            key={channel}
-            role="button"
-            tabIndex={0}
-            className="relative flex h-6 cursor-pointer items-center hover:bg-neutral-150/50 dark:hover:bg-neutral-850"
-            onClick={() => toggleChannelFilter(channel)}
-            onKeyDown={event => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                toggleChannelFilter(channel);
-              }
-            }}
-          >
-            <div
-              className="absolute inset-0 rounded-md bg-dataviz opacity-25"
-              style={{ width: `${Math.round(item.percentage * 100)}%` }}
-            />
-            <div className="z-10 mx-2 flex w-full items-center justify-between gap-2 text-xs">
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <ChannelIcon channel={channel} className="h-4 w-4 shrink-0" />
-                <span className="truncate text-neutral-700 dark:text-neutral-200">{label}</span>
-              </div>
-              <span className="shrink-0 tabular-nums font-medium text-neutral-900 dark:text-neutral-100">
-                {formatter(item.count)}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <StandardSection
+      filterParameter="channel"
+      title={t("Channels")}
+      getValue={e => e.value}
+      getKey={e => e.value}
+      getLabel={e => (
+        <div className="flex items-center gap-2">
+          <ChannelIcon channel={e.value} />
+          {e.value || t("Direct")}
+        </div>
+      )}
+      lite
+      renderDialog={false}
+    />
   );
 }
+
+type ArcLayout = {
+  path: string;
+  index: number;
+  iconX: number;
+  iconY: number;
+  largeEnough: boolean;
+  labelX: number;
+  labelY: number;
+  labelAnchor: "start" | "end";
+  linePath: string;
+};
 
 export function ChannelDonut() {
   const t = useExtracted();
@@ -240,15 +208,7 @@ export function ChannelDonut() {
   const { data, isLoading } = useMetric({ parameter: "channel", limit: 100 });
   const { time, site, filters } = useStore();
 
-  const slices = useMemo(
-    () => buildSlices(data?.data ?? [], directLabel),
-    [data?.data, directLabel]
-  );
-
-  const mobileItems = useMemo(
-    () => [...(data?.data ?? [])].sort((a, b) => b.count - a.count),
-    [data?.data]
-  );
+  const slices = useMemo(() => buildSlices(data?.data ?? [], directLabel), [data?.data, directLabel]);
 
   const total = useMemo(() => slices.reduce((sum, slice) => sum + slice.count, 0), [slices]);
 
@@ -293,32 +253,57 @@ export function ChannelDonut() {
       .sort((a, b) => b.count - a.count);
   }, [activeSlice, data?.data]);
 
-  const arcs = useMemo(() => {
+  const arcs = useMemo((): ArcLayout[] => {
     if (size.width === 0 || size.height === 0 || total === 0) return [];
-    const radius = Math.max(0, Math.min(size.width, size.height) / 2 - 8);
+
+    const labelPadding = 36;
+    const radius = Math.max(0, Math.min(size.width, size.height) / 2 - labelPadding);
+    const innerRadius = radius * 0.52;
+    const outerRadius = radius;
+
     const arcGen = d3
       .arc<d3.PieArcDatum<number>>()
-      .innerRadius(radius * 0.68)
-      .outerRadius(radius)
-      .padAngle(0.015)
+      .innerRadius(innerRadius)
+      .outerRadius(outerRadius)
+      .padAngle(0.02)
       .cornerRadius(2);
+
     const pieGen = d3
       .pie<number>()
       .sort(null)
       .value(value => value);
+
     const pieData = pieGen(slices.map(slice => slice.count));
+    const midArc = d3
+      .arc<d3.PieArcDatum<number>>()
+      .innerRadius((innerRadius + outerRadius) / 2)
+      .outerRadius((innerRadius + outerRadius) / 2);
+
+    const labelRadius = outerRadius + 14;
+    const labelArc = d3
+      .arc<d3.PieArcDatum<number>>()
+      .innerRadius(labelRadius)
+      .outerRadius(labelRadius);
+
     return pieData.map(datum => {
-      const midArc = d3
-        .arc<d3.PieArcDatum<number>>()
-        .innerRadius(radius * 0.84)
-        .outerRadius(radius * 0.84);
       const [iconX, iconY] = midArc.centroid(datum);
+      const [labelX, labelY] = labelArc.centroid(datum);
+      const angle = (datum.startAngle + datum.endAngle) / 2;
+      const lineStartX = Math.sin(angle) * outerRadius;
+      const lineStartY = -Math.cos(angle) * outerRadius;
+      const lineEndX = Math.sin(angle) * (outerRadius + 8);
+      const lineEndY = -Math.cos(angle) * (outerRadius + 8);
+
       return {
         path: arcGen(datum) ?? "",
         index: datum.index,
         iconX,
         iconY,
-        largeEnough: datum.endAngle - datum.startAngle > 0.35,
+        largeEnough: datum.endAngle - datum.startAngle > 0.28,
+        labelX,
+        labelY,
+        labelAnchor: labelX >= 0 ? "start" : "end",
+        linePath: `M${lineStartX},${lineStartY} L${lineEndX},${lineEndY} L${labelX},${labelY}`,
       };
     });
   }, [slices, size, total]);
@@ -329,60 +314,62 @@ export function ChannelDonut() {
   const tooltipLeft = hover ? Math.min(hover.clientX + 14, viewportW - tooltipWidth - 8) : 0;
   const tooltipTop = hover ? Math.min(hover.clientY + 14, viewportH - 200) : 0;
 
-  function setHoverIndex(index: number, event?: { clientX: number; clientY: number }) {
-    if (event) {
-      setHover({ index, clientX: event.clientX, clientY: event.clientY });
-      return;
-    }
-    const rect = wrapperRef.current?.getBoundingClientRect();
-    if (rect) {
-      setHover({ index, clientX: rect.right - 8, clientY: rect.top + rect.height / 2 });
-    }
-  }
-
   return (
     <>
-      <div className="h-[350px] overflow-y-auto sm:hidden">
-        <ChannelMobileList
-          items={mobileItems}
-          directLabel={directLabel}
-          isLoading={isLoading}
-          emptyLabel={t("No channel data available")}
-        />
+      <div className="sm:hidden">
+        <ChannelsMobileSection />
       </div>
 
-      <div className="hidden h-[350px] sm:flex sm:flex-row sm:gap-6">
-      <div ref={wrapperRef} className="relative min-h-[180px] w-full max-w-[220px] flex-1 sm:mx-0 sm:max-w-none">
+      <div ref={wrapperRef} className="relative hidden h-[350px] overflow-hidden sm:flex sm:items-center sm:justify-center">
         {isLoading && total === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="h-36 w-36 animate-pulse rounded-full border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-850" />
-          </div>
+          <div className="h-40 w-40 animate-pulse rounded-full border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-850" />
         ) : total === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-neutral-500">{t("No channel data available")}</div>
+          <div className="text-sm text-neutral-500">{t("No channel data available")}</div>
         ) : (
           size.width > 0 &&
           size.height > 0 && (
-            <svg width={size.width} height={size.height} className="block" aria-label={t("Channel distribution")}>
+            <svg width={size.width} height={size.height} className="block max-w-full" aria-label={t("Channel distribution")}>
               <g transform={`translate(${size.width / 2}, ${size.height / 2})`}>
                 {arcs.map(arc => {
                   const slice = slices[arc.index];
                   const color = sliceColor(slice.value, arc.index);
                   const isActive = hover?.index === arc.index;
+                  const dimmed = hover !== null && !isActive;
+
                   return (
                     <g key={slice.value + arc.index}>
                       <path
                         d={arc.path}
                         fill={color}
-                        opacity={hover && !isActive ? 0.4 : 1}
+                        opacity={dimmed ? 0.35 : 1}
                         className="cursor-pointer transition-opacity"
-                        onMouseMove={event => setHoverIndex(arc.index, event)}
+                        onMouseMove={event =>
+                          setHover({ index: arc.index, clientX: event.clientX, clientY: event.clientY })
+                        }
                         onMouseLeave={() => setHover(null)}
                       />
+                      <path
+                        d={arc.linePath}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity={dimmed ? 0.2 : 0.35}
+                        className="pointer-events-none text-neutral-400"
+                      />
+                      <text
+                        x={arc.labelX}
+                        y={arc.labelY}
+                        textAnchor={arc.labelAnchor}
+                        dominantBaseline="middle"
+                        className="pointer-events-none fill-neutral-600 text-[11px] dark:fill-neutral-300"
+                        opacity={dimmed ? 0.45 : 1}
+                      >
+                        {slice.label}
+                      </text>
                       {arc.largeEnough && (
                         <g
                           transform={`translate(${arc.iconX}, ${arc.iconY})`}
                           className="pointer-events-none text-neutral-900 dark:text-neutral-100"
-                          opacity={hover && !isActive ? 0.45 : 0.9}
+                          opacity={dimmed ? 0.4 : 0.95}
                         >
                           <foreignObject x={-8} y={-8} width={16} height={16}>
                             <div className="flex h-4 w-4 items-center justify-center">
@@ -425,50 +412,11 @@ export function ChannelDonut() {
                 directLabel={directLabel}
                 topSourcesLabel={topSourcesLabel}
                 breakdownLabel={breakdownLabel}
+                totalVisitors={total}
               />
             </div>,
             document.body
           )}
-      </div>
-
-      <div className="min-w-0 flex-1 space-y-0.5 overflow-y-auto">
-        {slices.map((slice, index) => {
-          const color = sliceColor(slice.value, index);
-          const isActive = hover?.index === index;
-          return (
-            <button
-              key={slice.value + index}
-              type="button"
-              className={cn(
-                "relative flex h-6 w-full items-center rounded-md px-2 text-left text-xs transition-colors",
-                isActive
-                  ? "bg-neutral-150/70 dark:bg-neutral-850"
-                  : "hover:bg-neutral-150/50 dark:hover:bg-neutral-850/60"
-              )}
-              onMouseEnter={event => setHoverIndex(index, event)}
-              onMouseLeave={() => setHover(null)}
-              onFocus={() => {
-                const rect = wrapperRef.current?.getBoundingClientRect();
-                if (rect) setHover({ index, clientX: rect.right - 8, clientY: rect.top + rect.height / 2 });
-              }}
-              onBlur={() => setHover(null)}
-            >
-              <div
-                className="absolute inset-y-0 left-0 rounded-md bg-dataviz opacity-20"
-                style={{ width: `${Math.round(slice.percentage * 100)}%` }}
-              />
-              <span className="z-10 flex min-w-0 flex-1 items-center gap-2">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                <ChannelIcon channel={slice.value === "Other" ? "Unknown" : slice.value} className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-neutral-700 dark:text-neutral-200">{slice.label}</span>
-              </span>
-              <span className="z-10 shrink-0 pl-2 tabular-nums font-medium text-neutral-900 dark:text-neutral-100">
-                {formatter(slice.count)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
       </div>
     </>
   );

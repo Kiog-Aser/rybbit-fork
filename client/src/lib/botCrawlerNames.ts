@@ -65,13 +65,17 @@ const DEFAULT_BRAND = {
 
 export function getCrawlerDisplayName(matchedPattern: string): string {
   if (!matchedPattern) return "Unknown crawler";
+  // Middleware stores "answer_fetch:chatgpt-user" — strip purpose prefix for labels.
+  const agent = matchedPattern.includes(":")
+    ? matchedPattern.slice(matchedPattern.indexOf(":") + 1)
+    : matchedPattern;
   for (const { pattern, label } of CRAWLER_LABELS) {
-    if (pattern.test(matchedPattern)) return label;
+    if (pattern.test(agent) || pattern.test(matchedPattern)) return label;
   }
-  if (/[\^$()?*+|\\]/.test(matchedPattern)) {
+  if (/[\^$()?*+|\\]/.test(agent)) {
     return "Other bot";
   }
-  const trimmed = matchedPattern.replace(/^\^|\$$/g, "").slice(0, 32);
+  const trimmed = agent.replace(/^\^|\$$/g, "").slice(0, 32);
   return trimmed || "Other bot";
 }
 

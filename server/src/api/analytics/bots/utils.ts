@@ -69,14 +69,21 @@ export function getBotLayerStatement(layer?: string | null) {
  * answer fetchers (agent). Order matters — more specific agent tokens first.
  */
 export function getBotPurposeExpression() {
+  // Order matters: answer-fetch first, then indexing, then training.
+  // Middleware ingest stores "answer_fetch:chatgpt-user" style patterns;
+  // JS-detected bots store raw UA regex fragments (chatgpt-user, gptbot, …).
   return `multiIf(
-    match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-code|meta-externalfetcher|mistralai-user|google-agent|google-cloudvertexbot|google-notebooklm|youchat|manus-user)'),
+    startsWith(matched_ua_pattern, 'answer_fetch:')
+      OR match(matched_ua_pattern, '(?i)(chatgpt-user|perplexity-user|claude-user|claude-code|meta-externalfetcher|mistralai-user|google-agent|googleagent|google-cloudvertexbot|google-notebooklm|google-read-aloud|youchat|manus-user|copilot|amzn-user|kimi-user|qwen-user|xai-searchbot|grok-deepsearch|duckassistbot)'),
       'ai_answers',
-    bot_category = 'search'
-      OR match(matched_ua_pattern, '(?i)(oai-searchbot|claude-searchbot|perplexitybot|google-inspectiontool|duckassistbot|mistralai-index|googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview)'),
+    startsWith(matched_ua_pattern, 'search_index:')
+      OR bot_category = 'search'
+      OR match(matched_ua_pattern, '(?i)(oai-searchbot|claude-searchbot|perplexitybot|google-inspectiontool|mistralai-index|googlebot|bingbot|msnbot|yandexbot|duckduckbot|slurp|baiduspider|applebot|petalbot|sogou|exaleadcloudview|amzn-searchbot|kimi-searchbot|tiktokspider|youbot)'),
       'indexing',
-    bot_category = 'ai'
-      OR match(matched_ua_pattern, '(?i)(gptbot|claudebot|ccbot|bytespider|meta-externalagent|amazonbot|anthropic-ai|cohere-ai|diffbot|grokbot|openai/|gemini|googleother)'),
+    startsWith(matched_ua_pattern, 'training:')
+      OR startsWith(matched_ua_pattern, 'ai_crawler:')
+      OR bot_category = 'ai'
+      OR match(matched_ua_pattern, '(?i)(gptbot|claudebot|ccbot|bytespider|meta-externalagent|amazonbot|anthropic-ai|cohere-ai|diffbot|grokbot|openai|gemini|googleother|google-extended|applebot-extended|kimibot|deepseekbot|chatglm|erniebot|ai2bot|xai-bot|xai-grok|xai-web-crawler)'),
       'training',
     ''
   )`;

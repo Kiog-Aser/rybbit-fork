@@ -178,6 +178,7 @@ import { reengagementService } from "./services/reengagement/reengagementService
 import { telemetryService } from "./services/telemetryService.js";
 import { handleIdentify } from "./services/tracker/identifyService.js";
 import { trackEvent } from "./services/tracker/trackEvent.js";
+import { handleAiCrawlIngest } from "./services/tracker/aiCrawlIngest.js";
 import { recordCrawlerRequest, shouldRecordCrawlerRequest } from "./services/tracker/crawlerTracking.js";
 import { usageService } from "./services/usageService.js";
 import { weeklyReportService } from "./services/weekyReports/weeklyReportService.js";
@@ -527,6 +528,8 @@ async function apiRoutes(fastify: FastifyInstance) {
 
 server.post("/api/track", trackEvent);
 server.post("/api/identify", handleIdentify);
+// Site middleware reports AI/search crawler page hits here (bots do not run JS).
+server.post("/api/ai-crawls", handleAiCrawlIngest);
 
 // Register API routes with /api prefix
 server.register(apiRoutes, { prefix: "/api" });

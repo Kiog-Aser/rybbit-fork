@@ -61,3 +61,7 @@ akash/deploy.local.yaml
 !.github/workflows/sync-upstream.yml
 
 .impeccable/critique
+# Ship built @rybbit/ai-crawl package for file: / git installs
+!packages/ai-crawl/dist/
+!packages/ai-crawl/dist/**
+packages/**/node_modules/

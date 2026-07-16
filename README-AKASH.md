@@ -7,6 +7,28 @@ This fork extends [Rybbit](https://github.com/rybbit-io/rybbit) for cheap self-h
 - **Lite dashboard** materialized views for lower ClickHouse RAM
 - **Journeys / funnels / goals** — unchanged from upstream
 
+## Email (weekly reports)
+
+Self-hosted email uses [Resend](https://resend.com). Without a key, auth emails and weekly reports are no-ops (logged as skipped).
+
+```bash
+# In docker-compose.yml under backend.environment:
+- RESEND_API_KEY=re_xxxxxxxx
+# Optional overrides:
+- EMAIL_FROM=Analytics <reports@yourdomain.com>   # must be a verified Resend domain
+- WEEKLY_REPORTS_ENABLED=true                      # default: on when RESEND_API_KEY is set
+- BASE_URL=https://analytics.yourdomain.com        # used in report dashboard links
+```
+
+Weekly reports run **Mondays 09:00 UTC** and go to org members with `sendAutoEmailReports` enabled (Account settings). Admins can also trigger:
+
+```bash
+curl -X POST https://analytics.yourdomain.com/api/admin/weekly-reports/send \
+  -H "Cookie: <session>"
+```
+
+Reports include visitors, revenue (if Stripe attribution is on), bounce rate, session time, top referrers/countries/pages, and AI crawler answer traffic.
+
 ## Quick start (Docker Compose)
 
 Best for local testing before Akash:

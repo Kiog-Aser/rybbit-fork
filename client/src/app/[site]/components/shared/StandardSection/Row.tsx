@@ -4,7 +4,16 @@ import { ChevronDown, ChevronRight, SquareArrowOutUpRight } from "lucide-react";
 import { ReactNode, useState, useCallback } from "react";
 import { usePaginatedMetric } from "../../../../../api/analytics/hooks/useGetMetric";
 import { MetricResponse } from "../../../../../api/analytics/endpoints";
+import { REVENUE_ATTRIBUTION } from "../../../../../lib/const";
 import { addFilter, removeFilter, useStore } from "../../../../../lib/store";
+
+function formatRevenue(cents: number | undefined): string | null {
+  if (cents === undefined || cents <= 0) return null;
+  return `$${(cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+}
 
 // Custom hook for filter handling logic
 const useFilterToggle = () => {
@@ -40,6 +49,7 @@ const RowItem = ({
   filterParameter,
   onFilterToggle,
   leftContent,
+  revenueCents,
 }: {
   item: MetricResponse;
   ratio: number;
@@ -50,8 +60,10 @@ const RowItem = ({
   filterParameter: FilterParameter;
   onFilterToggle: (parameter: FilterParameter, value: string) => void;
   leftContent?: ReactNode;
+  revenueCents?: number;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const revenueLabel = REVENUE_ATTRIBUTION ? formatRevenue(revenueCents) : null;
 
   return (
     <div
@@ -78,11 +90,16 @@ const RowItem = ({
             </a>
           )}
         </div>
-        <div className="text-xs flex gap-2 shrink-0">
+        <div className="text-xs flex gap-2 shrink-0 items-center">
           <div className="hidden group-hover:block text-neutral-600 dark:text-neutral-400">
             {round(item.percentage, 1)}%
           </div>
-          <span>
+          {revenueLabel && (
+            <span className="text-accent-400 font-medium tabular-nums min-w-[3rem] text-right">
+              {revenueLabel}
+            </span>
+          )}
+          <span className="tabular-nums min-w-[2rem] text-right">
             {isHovered
               ? item.count.toLocaleString()
               : item.count.toLocaleString(undefined, { notation: "compact" })}
@@ -161,6 +178,7 @@ export const Row = ({
   filterParameter,
   getSubrowLabel,
   hasSubrow,
+  revenueCents,
 }: {
   e: MetricResponse;
   ratio: number;
@@ -171,6 +189,7 @@ export const Row = ({
   filterParameter: FilterParameter;
   getSubrowLabel?: (item: MetricResponse) => ReactNode;
   hasSubrow?: boolean;
+  revenueCents?: number;
 }) => {
   const toggleFilter = useFilterToggle();
   const [expanded, setExpanded] = useState(false);
@@ -200,6 +219,7 @@ export const Row = ({
         filterParameter={filterParameter}
         onFilterToggle={toggleFilter}
         leftContent={expandIcon}
+        revenueCents={revenueCents}
       />
       {hasSubrow && expanded && (
         <Subrows

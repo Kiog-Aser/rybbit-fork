@@ -4,7 +4,6 @@ import {
   Head,
   Hr,
   Html,
-  Img,
   Link,
   Preview,
   Section,
@@ -21,70 +20,48 @@ interface WeeklyReportEmailProps {
   site: SiteReport;
 }
 
-interface MetricCardProps {
-  label: string;
-  currentValue: string;
-  growth: string;
-  isPositive: boolean;
-}
-
-interface TopListItemProps {
-  value: string;
-  percentage: number | null;
-  count: number;
-  barWidth: number;
-  isLast: boolean;
-  favicon?: string;
-  labelClassName?: string;
-}
-
-interface TopListSectionProps {
-  title: string;
-  items: MetricData[];
-  renderLabel: (item: MetricData) => React.ReactNode;
-  showFavicon?: boolean;
-  labelClassName?: string;
-  className?: string;
-}
-
 const calculateGrowth = (current: number | null | undefined, previous: number | null | undefined): string => {
   const curr = current ?? 0;
   const prev = previous ?? 0;
-
-  if (prev === 0) {
-    return curr > 0 ? "+100%" : "0%";
-  }
+  if (prev === 0) return curr > 0 ? "+100%" : "0%";
   const growth = ((curr - prev) / prev) * 100;
   const sign = growth > 0 ? "+" : "";
   return `${sign}${growth.toFixed(1)}%`;
 };
 
+const growthPositive = (
+  current: number | null | undefined,
+  previous: number | null | undefined,
+  lowerIsBetter = false
+): boolean => {
+  const curr = current ?? 0;
+  const prev = previous ?? 0;
+  if (lowerIsBetter) return curr <= prev;
+  return curr >= prev;
+};
+
 const formatDuration = (seconds: number): string => {
-  if (seconds < 60) {
-    return `${Math.round(seconds)}s`;
-  }
+  if (!seconds || seconds < 0) return "0s";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.round(seconds % 60);
   return `${minutes}m ${remainingSeconds}s`;
 };
 
 const formatNumber = (num: number | null | undefined): string => {
-  if (num == null || isNaN(num)) {
-    return "0";
-  }
-  if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(1)}M`;
-  }
-  if (num >= 1000) {
-    return `${(num / 1000).toFixed(1)}K`;
-  }
-  return num.toFixed(0);
+  if (num == null || isNaN(num)) return "0";
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return Math.round(num).toLocaleString();
+};
+
+const formatMoney = (cents: number | null | undefined): string => {
+  const value = (cents ?? 0) / 100;
+  return value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 };
 
 const safeToFixed = (num: number | null | undefined, decimals: number = 1): string => {
-  if (num == null || isNaN(num)) {
-    return "0";
-  }
+  if (num == null || isNaN(num)) return "0";
   return num.toFixed(decimals);
 };
 
@@ -104,152 +81,93 @@ const getCountryDisplay = (countryCode: string): string => {
     const flag = getCountryFlag(countryCode);
     const name = regionNamesInEnglish.of(countryCode.toUpperCase()) || countryCode;
     return `${flag} ${name}`;
-  } catch (error) {
+  } catch {
     return countryCode;
   }
 };
 
-const MetricCard = ({ label, currentValue, growth, isPositive }: MetricCardProps) => (
-  <div
-    style={{
-      backgroundColor: "#f9fafb",
-      border: "1px solid #e5e7eb",
-      borderRadius: "8px",
-      padding: "16px",
-    }}
-  >
-    <Text style={{ color: "#6b7280", fontSize: "12px", marginBottom: "4px", marginTop: 0 }}>{label}</Text>
-    <div>
-      <span style={{ color: "#111827", fontSize: "24px", fontWeight: "bold", lineHeight: "1", marginRight: "8px" }}>
-        {currentValue}
-      </span>
-      <span
-        style={{
-          color: isPositive ? "#10b981" : "#ef4444",
-          fontSize: "12px",
-          fontWeight: 500,
-          lineHeight: "1",
-          verticalAlign: "baseline",
-        }}
-      >
-        {growth}
-      </span>
-    </div>
-  </div>
-);
-
-const TopListItem = ({ value, percentage, count, barWidth, isLast, favicon, labelClassName }: TopListItemProps) => {
-  const barStyle: React.CSSProperties = {
-    background: `linear-gradient(to right, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.25) ${barWidth}%, transparent ${barWidth}%, transparent 100%)`,
-    borderRadius: "6px",
-  };
-
-  return (
-    <table
-      style={{
-        width: "100%",
-        marginBottom: isLast ? "0" : "8px",
-        borderCollapse: "separate",
-        borderSpacing: "0",
-        ...barStyle,
-      }}
-    >
-      <tbody>
-        <tr>
-          <td style={{ padding: "4px 8px", verticalAlign: "middle" }}>
-            {favicon ? (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <tbody>
-                  <tr>
-                    <td style={{ width: "16px", paddingRight: "4px", verticalAlign: "middle" }}>
-                      <img src={favicon} alt="" width="16" height="16" style={{ display: "block" }} />
-                    </td>
-                    <td style={{ verticalAlign: "middle" }}>
-                      <Text
-                        style={{
-                          color: "#111827",
-                          fontSize: "14px",
-                          margin: 0,
-                          lineHeight: "1.2",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {value}
-                      </Text>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            ) : (
-              <Text style={{ color: "#111827", fontSize: "14px", margin: 0, lineHeight: "1.2" }}>{value}</Text>
-            )}
-          </td>
-          <td style={{ padding: "8px", textAlign: "right", verticalAlign: "middle", whiteSpace: "nowrap" }}>
-            <Text style={{ color: "#6b7280", fontSize: "12px", margin: 0, marginRight: "12px", lineHeight: "1.2" }}>
-              {safeToFixed(percentage, 1)}%
-            </Text>
-          </td>
-          <td
-            style={{ padding: "8px", textAlign: "right", verticalAlign: "middle", whiteSpace: "nowrap", width: "40px" }}
-          >
-            <Text style={{ color: "#111827", fontSize: "14px", fontWeight: 500, margin: 0, lineHeight: "1.2" }}>
-              {formatNumber(count)}
-            </Text>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  );
+/** Map raw crawler patterns to product names for AI answers. */
+const agentDisplayName = (pattern: string): string => {
+  const p = pattern.toLowerCase();
+  if (p.includes("chatgpt") || p.includes("gptbot") || p.includes("openai")) {
+    if (p.includes("chatgpt-user") || p.includes("answer_fetch")) return "ChatGPT";
+    return "OpenAI";
+  }
+  if (p.includes("claude") || p.includes("anthropic")) {
+    if (p.includes("claude-user") || p.includes("answer_fetch")) return "Claude";
+    return "Anthropic";
+  }
+  if (p.includes("perplexity")) return "Perplexity";
+  if (p.includes("google")) return "Google";
+  // Strip purpose prefix
+  const colon = pattern.indexOf(":");
+  return colon > 0 ? pattern.slice(colon + 1) : pattern;
 };
 
-const TopListSection = ({ title, items, renderLabel, showFavicon, labelClassName, className }: TopListSectionProps) => {
-  if (items.length === 0) return null;
+const MetricRow = ({
+  emoji,
+  label,
+  value,
+  growth,
+  positive,
+}: {
+  emoji: string;
+  label: string;
+  value: string;
+  growth: string;
+  positive: boolean;
+}) => (
+  <Text style={{ color: "#111827", fontSize: "15px", margin: "0 0 8px 0", lineHeight: "1.5" }}>
+    {emoji} <strong>{value}</strong> {label}{" "}
+    <span style={{ color: positive ? "#059669" : "#dc2626", fontSize: "13px" }}>
+      ({positive ? "🟢" : "🔴"} {growth})
+    </span>
+  </Text>
+);
 
-  const ratio = items[0]?.percentage ? 100 / items[0].percentage : 1;
-
+const ListSection = ({
+  title,
+  items,
+  renderLine,
+}: {
+  title: string;
+  items: MetricData[];
+  renderLine: (item: MetricData, index: number) => React.ReactNode;
+}) => {
+  if (!items.length) return null;
   return (
-    <div
-      style={{
-        backgroundColor: "#f9fafb",
-        border: "1px solid #e5e7eb",
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-      }}
-    >
-      <Text style={{ color: "#111827", fontSize: "14px", fontWeight: 600, marginBottom: "12px", marginTop: 0 }}>
-        {title}
-      </Text>
-      {items.map((item, index) => {
-        const barWidth = (item.percentage ?? 0) * ratio;
-        const favicon = showFavicon ? `https://www.google.com/s2/favicons?domain=${item.value}&sz=16` : undefined;
-
-        return (
-          <TopListItem
-            key={index}
-            value={typeof renderLabel(item) === "string" ? (renderLabel(item) as string) : item.value}
-            percentage={item.percentage}
-            count={item.count}
-            barWidth={barWidth}
-            isLast={index === items.length - 1}
-            favicon={favicon}
-            labelClassName={labelClassName}
-          />
-        );
-      })}
+    <div style={{ marginBottom: "20px" }}>
+      <Text style={{ color: "#111827", fontSize: "14px", fontWeight: 600, margin: "0 0 8px 0" }}>{title}</Text>
+      {items.map((item, i) => (
+        <Text key={i} style={{ color: "#374151", fontSize: "14px", margin: "0 0 4px 0", lineHeight: "1.45" }}>
+          {renderLine(item, i)}
+        </Text>
+      ))}
     </div>
   );
 };
 
 export const WeeklyReportEmail = ({ userName, organizationName, site }: WeeklyReportEmailProps) => {
   const currentYear = new Date().getFullYear();
+  const firstName = (userName || "there").split(" ")[0];
+  const periodLabel = `${site.periodStart} – ${site.periodEnd}`;
+  const visitors = site.currentWeek.users ?? 0;
+  const prevVisitors = site.previousWeek.users ?? 0;
+  const revenue = site.revenue;
+  const revPerVisitor =
+    visitors > 0 && revenue ? revenue.revenue_cents / visitors : 0;
+  const conversionRate =
+    visitors > 0 && revenue ? (revenue.paying_users / visitors) * 100 : 0;
+  const topDevice = site.deviceBreakdown[0];
+  const topBrowser = site.browserBreakdown[0];
+  const dashboardUrl = site.dashboardUrl || `https://analytics.milh.tech/${site.siteId}`;
 
   return (
     <Html>
       <Head />
-      <Preview>Weekly Analytics Report for {organizationName}</Preview>
+      <Preview>
+        {site.siteDomain}: {formatNumber(visitors)} visitors · {periodLabel}
+      </Preview>
       <Tailwind
         config={{
           presets: [pixelBasedPreset],
@@ -257,12 +175,9 @@ export const WeeklyReportEmail = ({ userName, organizationName, site }: WeeklyRe
             extend: {
               colors: {
                 brand: "#10b981",
-                cardBg: "#f9fafb",
                 darkText: "#111827",
                 mutedText: "#6b7280",
                 borderColor: "#e5e7eb",
-                positive: "#10b981",
-                negative: "#ef4444",
               },
             },
           },
@@ -270,138 +185,171 @@ export const WeeklyReportEmail = ({ userName, organizationName, site }: WeeklyRe
       >
         <Body className="bg-white font-sans">
           <Container className="mx-auto py-8 px-6 max-w-[600px]">
-            <Img
-              src="https://app.rybbit.io/rybbit/horizontal_black.svg"
-              alt="Rybbit"
-              width="120"
-              height="28"
-              className="mb-8"
-            />
-
-            <Text className="text-darkText text-base leading-relaxed mb-4">Hi {userName},</Text>
-
-            <Text className="text-darkText text-base leading-relaxed mb-8">
-              Here's your weekly analytics summary for{" "}
-              <span className="font-semibold">{site.siteDomain}</span>.
+            <Text style={{ color: "#111827", fontSize: "18px", fontWeight: 600, margin: "0 0 4px 0" }}>
+              Your analytics report for {site.siteDomain}
             </Text>
+            <Text style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 20px 0" }}>{periodLabel}</Text>
 
-            <Section className="mb-10">
-              {/* Metrics Cards */}
-              <table style={{ width: "100%", marginBottom: "24px" }}>
-                <tbody>
-                  <tr>
-                    <td style={{ width: "50%", paddingRight: "6px", paddingBottom: "12px" }}>
-                      <MetricCard
-                        label="Sessions"
-                        currentValue={formatNumber(site.currentWeek.sessions)}
-                        growth={calculateGrowth(site.currentWeek.sessions, site.previousWeek.sessions)}
-                        isPositive={site.currentWeek.sessions >= site.previousWeek.sessions}
-                      />
-                    </td>
-                    <td style={{ width: "50%", paddingLeft: "6px", paddingBottom: "12px" }}>
-                      <MetricCard
-                        label="Pageviews"
-                        currentValue={formatNumber(site.currentWeek.pageviews)}
-                        growth={calculateGrowth(site.currentWeek.pageviews, site.previousWeek.pageviews)}
-                        isPositive={site.currentWeek.pageviews >= site.previousWeek.pageviews}
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style={{ width: "50%", paddingRight: "6px", paddingBottom: "12px" }}>
-                      <MetricCard
-                        label="Unique Users"
-                        currentValue={formatNumber(site.currentWeek.users)}
-                        growth={calculateGrowth(site.currentWeek.users, site.previousWeek.users)}
-                        isPositive={site.currentWeek.users >= site.previousWeek.users}
-                      />
-                    </td>
-                    <td style={{ width: "50%", paddingLeft: "6px", paddingBottom: "12px" }}>
-                      <MetricCard
-                        label="Avg Duration"
-                        currentValue={formatDuration(site.currentWeek.session_duration)}
-                        growth={calculateGrowth(
-                          site.currentWeek.session_duration,
-                          site.previousWeek.session_duration
-                        )}
-                        isPositive={site.currentWeek.session_duration >= site.previousWeek.session_duration}
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style={{ width: "50%", paddingRight: "6px" }}>
-                      <MetricCard
-                        label="Pages/Session"
-                        currentValue={safeToFixed(site.currentWeek.pages_per_session, 1)}
-                        growth={calculateGrowth(
-                          site.currentWeek.pages_per_session,
-                          site.previousWeek.pages_per_session
-                        )}
-                        isPositive={
-                          (site.currentWeek.pages_per_session ?? 0) >= (site.previousWeek.pages_per_session ?? 0)
-                        }
-                      />
-                    </td>
-                    <td style={{ width: "50%", paddingLeft: "6px" }}>
-                      <MetricCard
-                        label="Bounce Rate"
-                        currentValue={`${safeToFixed(site.currentWeek.bounce_rate, 1)}%`}
-                        growth={calculateGrowth(site.currentWeek.bounce_rate, site.previousWeek.bounce_rate)}
-                        isPositive={(site.currentWeek.bounce_rate ?? 0) <= (site.previousWeek.bounce_rate ?? 0)}
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <Text style={{ color: "#111827", fontSize: "15px", margin: "0 0 16px 0" }}>Hi {firstName},</Text>
 
-              {/* Top Lists Section */}
-              <div className="mb-6">
-                <TopListSection
-                  title="Top Countries"
-                  items={site.topCountries}
-                  renderLabel={item => getCountryDisplay(item.value)}
-                />
-                <TopListSection
-                  title="Top Pages"
-                  items={site.topPages}
-                  renderLabel={item => item.value}
-                  labelClassName="text-darkText text-sm m-0 truncate max-w-[280px]"
-                />
-                <TopListSection
-                  title="Top Referrers"
-                  items={site.topReferrers}
-                  renderLabel={item => item.value}
-                  showFavicon={true}
-                  labelClassName="text-darkText text-sm m-0 truncate"
-                />
-                <TopListSection
-                  title="Device Breakdown"
-                  items={site.deviceBreakdown}
-                  renderLabel={item => item.value}
-                  labelClassName="text-darkText text-sm m-0 capitalize"
-                  className="bg-cardBg border border-borderColor rounded-lg p-4"
-                />
-              </div>
-
-              <Text className="text-darkText text-base leading-relaxed mb-4">
-                <Link href={`https://app.rybbit.io/${site.siteId}`} className="text-brand underline">
-                  View full dashboard
-                </Link>
-              </Text>
+            <Section style={{ marginBottom: "24px" }}>
+              <MetricRow
+                emoji="👥"
+                label="visitors"
+                value={formatNumber(visitors)}
+                growth={calculateGrowth(visitors, prevVisitors)}
+                positive={growthPositive(visitors, prevVisitors)}
+              />
+              {revenue && (
+                <>
+                  <MetricRow
+                    emoji="💰"
+                    label="revenue"
+                    value={formatMoney(revenue.revenue_cents)}
+                    growth={calculateGrowth(revenue.revenue_cents, revenue.previous_revenue_cents)}
+                    positive={growthPositive(revenue.revenue_cents, revenue.previous_revenue_cents)}
+                  />
+                  <MetricRow
+                    emoji="🤑"
+                    label="revenue per visitor"
+                    value={formatMoney(revPerVisitor)}
+                    growth={calculateGrowth(
+                      revPerVisitor,
+                      prevVisitors > 0 ? revenue.previous_revenue_cents / prevVisitors : 0
+                    )}
+                    positive={growthPositive(
+                      revPerVisitor,
+                      prevVisitors > 0 ? revenue.previous_revenue_cents / prevVisitors : 0
+                    )}
+                  />
+                  <MetricRow
+                    emoji="💯"
+                    label="conversion rate"
+                    value={`${safeToFixed(conversionRate, 2)}%`}
+                    growth={calculateGrowth(revenue.paying_users, 0)}
+                    positive={conversionRate > 0}
+                  />
+                </>
+              )}
+              <MetricRow
+                emoji="💥"
+                label="bounce rate"
+                value={`${safeToFixed(site.currentWeek.bounce_rate, 0)}%`}
+                growth={calculateGrowth(site.currentWeek.bounce_rate, site.previousWeek.bounce_rate)}
+                positive={growthPositive(site.currentWeek.bounce_rate, site.previousWeek.bounce_rate, true)}
+              />
+              <MetricRow
+                emoji="🕒"
+                label="session time"
+                value={formatDuration(site.currentWeek.session_duration)}
+                growth={calculateGrowth(site.currentWeek.session_duration, site.previousWeek.session_duration)}
+                positive={growthPositive(site.currentWeek.session_duration, site.previousWeek.session_duration)}
+              />
             </Section>
 
-            <Text className="text-mutedText text-sm leading-relaxed">
-              This report covers the last 7 days of analytics data.
+            <ListSection
+              title="🔗 Top referrers"
+              items={site.topReferrers}
+              renderLine={item => (
+                <>
+                  {item.value}: {formatNumber(item.count)} visitors
+                  {item.revenue_cents != null ? ` and ${formatMoney(item.revenue_cents)} revenue` : ""}
+                </>
+              )}
+            />
+
+            <ListSection
+              title="🌎 Top countries"
+              items={site.topCountries}
+              renderLine={item => (
+                <>
+                  {getCountryDisplay(item.value)}: {formatNumber(item.count)} visitors (
+                  {safeToFixed(item.percentage, 0)}% of total)
+                  {item.revenue_cents != null ? ` and ${formatMoney(item.revenue_cents)} revenue` : ""}
+                </>
+              )}
+            />
+
+            {(topDevice || topBrowser) && (
+              <Text style={{ color: "#374151", fontSize: "14px", margin: "0 0 20px 0", lineHeight: "1.45" }}>
+                💻 Most of your visitors come from{" "}
+                <strong>{topBrowser?.value || "their browser"}</strong> on{" "}
+                <strong>{(topDevice?.value || "desktop").toLowerCase()}</strong>
+                {site.deviceBreakdown[0]?.percentage != null
+                  ? ` (${safeToFixed(site.deviceBreakdown[0].percentage, 0)}%)`
+                  : ""}
+                .
+              </Text>
+            )}
+
+            <ListSection
+              title="📄 Top pages"
+              items={site.topPages}
+              renderLine={item => (
+                <>
+                  {item.value || "/"}: {formatNumber(item.count)} sessions ({safeToFixed(item.percentage, 0)}%)
+                </>
+              )}
+            />
+
+            {site.aiCrawlers && site.aiCrawlers.ai_answers > 0 && (
+              <div style={{ marginBottom: "20px" }}>
+                <Text style={{ color: "#111827", fontSize: "14px", fontWeight: 600, margin: "0 0 8px 0" }}>
+                  🤖 AI answer traffic
+                </Text>
+                <Text style={{ color: "#374151", fontSize: "14px", margin: "0 0 8px 0", lineHeight: "1.45" }}>
+                  AI assistants fetched your website <strong>{formatNumber(site.aiCrawlers.ai_answers)}</strong> times
+                  this week.
+                </Text>
+                {site.aiCrawlers.topAgents.map((agent, i) => (
+                  <Text key={i} style={{ color: "#374151", fontSize: "14px", margin: "0 0 4px 0" }}>
+                    {agentDisplayName(agent.value)}: {formatNumber(agent.count)} requests
+                  </Text>
+                ))}
+                {site.aiCrawlers.topPages.length > 0 && (
+                  <Text style={{ color: "#6b7280", fontSize: "13px", margin: "8px 0 0 0" }}>
+                    Most crawled pages: {site.aiCrawlers.topPages.map(p => p.value || "/").join(", ")}
+                  </Text>
+                )}
+              </div>
+            )}
+
+            {site.aiCrawlers && (site.aiCrawlers.indexing > 0 || site.aiCrawlers.training > 0) && (
+              <Text style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 20px 0" }}>
+                Also this week: {formatNumber(site.aiCrawlers.indexing)} indexing crawls ·{" "}
+                {formatNumber(site.aiCrawlers.training)} training crawls
+              </Text>
+            )}
+
+            <Text style={{ margin: "24px 0 8px 0" }}>
+              <Link
+                href={dashboardUrl}
+                style={{
+                  backgroundColor: "#10b981",
+                  color: "#ffffff",
+                  padding: "12px 20px",
+                  borderRadius: "6px",
+                  textDecoration: "none",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  display: "inline-block",
+                }}
+              >
+                View your analytics dashboard
+              </Link>
             </Text>
 
             <Hr className="border-borderColor my-8" />
 
-            <Text className="text-mutedText text-xs mb-2">
-              <Link href="https://app.rybbit.io/settings/account" className="text-mutedText underline">
-                Unsubscribe from weekly reports
-              </Link>
+            <Text style={{ color: "#6b7280", fontSize: "12px", margin: "0 0 8px 0" }}>
+              This report covers the last 7 days for {organizationName}.
             </Text>
-            <Text className="text-mutedText text-xs">© {currentYear} Rybbit Analytics</Text>
+            <Text style={{ color: "#6b7280", fontSize: "12px", margin: 0 }}>
+              <Link href={`${dashboardUrl.split("/").slice(0, 3).join("/")}/settings/account`} className="underline">
+                Manage email preferences
+              </Link>
+              {" · "}© {currentYear} Analytics
+            </Text>
           </Container>
         </Body>
       </Tailwind>

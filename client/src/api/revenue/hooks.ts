@@ -6,6 +6,7 @@ import {
   connectStripeRevenue,
   disconnectStripeRevenue,
   syncStripeRevenue,
+  fetchRevenueByDimension,
   fetchRevenueOverview,
   fetchRevenueTimeSeries,
   fetchStripeRevenueStatus,
@@ -102,4 +103,36 @@ export function useRevenueTimeSeries() {
     queryFn: () => fetchRevenueTimeSeries(site!, startTime, endTime, bucket, timeZone),
     enabled: Boolean(site) && REVENUE_ATTRIBUTION,
   });
+}
+
+const REVENUE_DIMENSIONS = new Set([
+  "channel",
+  "referrer",
+  "pathname",
+  "country",
+  "device_type",
+  "browser",
+  "operating_system",
+]);
+
+/** Map of dimension value → revenue cents for the current time range. */
+export function useRevenueByDimension(parameter: string | undefined) {
+  const { site, time } = useStore();
+  const { startTime, endTime } = revenueTimeRange(buildApiParams(time, { filters: undefined }));
+  const enabled =
+    Boolean(site) && REVENUE_ATTRIBUTION && Boolean(parameter) && REVENUE_DIMENSIONS.has(parameter!);
+
+  const query = useQuery({
+    queryKey: ["revenue-by-dimension", site, time, parameter],
+    queryFn: () => fetchRevenueByDimension(site!, startTime, endTime, parameter!),
+    enabled,
+    staleTime: 60_000,
+  });
+
+  const byValue = new Map<string, number>();
+  for (const row of query.data ?? []) {
+    byValue.set(row.value, row.revenue_cents);
+  }
+
+  return { ...query, byValue };
 }

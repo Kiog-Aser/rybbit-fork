@@ -6,7 +6,7 @@ import { useGetBotDimension } from "../../../../api/analytics/hooks/bots/useGetB
 import { CrawlerLogo } from "../../../../components/CrawlerLogo";
 import { Card, CardContent, CardLoader } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../lib/botCrawlerNames";
+import { aggregateCrawlerRows, getCrawlerBrandStyle } from "../../../../lib/botCrawlerNames";
 import { useStore } from "../../../../lib/store";
 
 export function BotCrawlers() {
@@ -19,7 +19,10 @@ export function BotCrawlers() {
     page: 1,
   });
 
-  const crawlers = data?.data?.data.filter(item => item.value && item.value !== "") ?? [];
+  const crawlers = aggregateCrawlerRows(
+    data?.data?.data.filter(item => item.value && item.value !== "") ?? [],
+    "all"
+  );
 
   return (
     <Card>
@@ -40,19 +43,18 @@ export function BotCrawlers() {
         ) : (
           <div className="space-y-1.5">
             {crawlers.map(item => {
-              const label = getCrawlerDisplayName(item.value);
-              const brand = getCrawlerBrandStyle(label);
+              const brand = getCrawlerBrandStyle(item.label);
 
               return (
                 <div
-                  key={item.value}
+                  key={item.label}
                   className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5"
                   style={{ backgroundColor: brand.background }}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <CrawlerLogo label={label} size={18} />
+                    <CrawlerLogo label={item.label} size={18} />
                     <span className="text-sm font-medium truncate" style={{ color: brand.foreground }}>
-                      {label}
+                      {item.label}
                     </span>
                   </div>
                   <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: brand.foreground }}>

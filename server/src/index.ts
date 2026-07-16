@@ -75,6 +75,7 @@ import {
   connectStripeRevenue,
   disconnectStripeRevenue,
   syncStripeRevenue,
+  getRevenueByDimensionHandler,
   getRevenueOverviewHandler,
   getRevenueTimeSeriesHandler,
   getStripeRevenueStatus,
@@ -464,6 +465,7 @@ async function revenueRoutes(fastify: FastifyInstance) {
   fastify.delete("/sites/:siteId/revenue/stripe/connect", adminSite, disconnectStripeRevenue);
   fastify.get("/sites/:siteId/revenue/overview", publicSite, getRevenueOverviewHandler);
   fastify.get("/sites/:siteId/revenue/time-series", publicSite, getRevenueTimeSeriesHandler);
+  fastify.get("/sites/:siteId/revenue/by-dimension", publicSite, getRevenueByDimensionHandler);
   fastify.post("/sites/:siteId/revenue/stripe/webhook", { config: { rawBody: true } }, stripeRevenueWebhook);
 }
 
@@ -485,6 +487,11 @@ async function stripeAdminRoutes(fastify: FastifyInstance) {
   fastify.put("/admin/sites/:siteId/move", adminOnly, adminMoveSite);
   fastify.get("/admin/organizations", adminOnly, getAdminOrganizations);
   fastify.get("/admin/service-event-count", adminOnly, getAdminServiceEventCount);
+  // Manually fire weekly reports (admin only — useful after configuring Resend).
+  fastify.post("/admin/weekly-reports/send", adminOnly, async (_req, reply) => {
+    void weeklyReportService.generateAndSendReports();
+    return reply.send({ success: true, message: "Weekly report generation started" });
+  });
   fastify.post("/admin/telemetry", collectTelemetry); // Public - telemetry collection
 
   // STRIPE & ADMIN
@@ -573,8 +580,12 @@ async function runBackgroundInitialization() {
       setTimeout(() => void syncAllConnectedStripeSites(), 30_000);
       server.log.info("Stripe revenue auto-sync scheduled (every 10 minutes)");
     }
-    if (IS_CLOUD && process.env.NODE_ENV !== "development") {
+    // Weekly reports: cloud always; self-host when RESEND_API_KEY is set (or WEEKLY_REPORTS_ENABLED=true).
+    const { WEEKLY_REPORTS_ENABLED } = await import("./lib/const.js");
+    if (WEEKLY_REPORTS_ENABLED && process.env.NODE_ENV !== "development") {
       weeklyReportService.startWeeklyReportCron();
+    }
+    if (IS_CLOUD && process.env.NODE_ENV !== "development") {
       reengagementService.startReengagementCron();
     }
     server.log.info("Background database initialization complete");

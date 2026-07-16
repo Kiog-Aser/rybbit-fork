@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { render } from "@react-email/components";
-import { IS_CLOUD } from "../const.js";
+import { EMAIL_ENABLED, EMAIL_FROM, IS_CLOUD, RESEND_API_KEY } from "../const.js";
 import { ApproachingLimitEmail } from "./templates/ApproachingLimitEmail.js";
 import { InvitationEmail } from "./templates/InvitationEmail.js";
 import { LimitExceededEmail } from "./templates/LimitExceededEmail.js";
@@ -15,8 +15,9 @@ import type { ReengagementContent } from "../../services/reengagement/reengageme
 let resend: Resend | undefined;
 let marketingAudienceId: string | null = null;
 
-if (IS_CLOUD) {
-  resend = new Resend(process.env.RESEND_API_KEY);
+// Enable whenever RESEND_API_KEY is set (cloud or self-hosted).
+if (EMAIL_ENABLED) {
+  resend = new Resend(RESEND_API_KEY);
 }
 
 // Marketing audience management
@@ -75,13 +76,14 @@ export const unsubscribeContact = async (email: string): Promise<void> => {
 
 export const sendEmail = async (email: string, subject: string, html: string) => {
   if (!resend) {
+    console.warn(
+      `[email] Skipped send to ${email} (subject: ${subject}) — set RESEND_API_KEY to enable email`
+    );
     return;
-    // not sure how to handle self hosted instances without resend
-    // throw new Error("Resend is not initialized");
   }
   try {
     const response = await resend.emails.send({
-      from: "Rybbit <automail@email.rybbit.com>",
+      from: EMAIL_FROM,
       to: email,
       subject,
       html,
@@ -212,7 +214,17 @@ export const sendWeeklyReportEmail = async (
     })
   );
 
-  const subject = `Weekly Analytics Report - ${site.siteName}`;
+  const visitors = site.currentWeek.users ?? 0;
+  const prevVisitors = site.previousWeek.users ?? 0;
+  const growth =
+    prevVisitors === 0
+      ? visitors > 0
+        ? "+100%"
+        : "0%"
+      : `${visitors >= prevVisitors ? "+" : ""}${(((visitors - prevVisitors) / prevVisitors) * 100).toFixed(0)}%`;
+
+  // DataFast-style subject: domain + headline visitor growth
+  const subject = `Your analytics report for ${site.siteDomain} · ${visitors.toLocaleString()} visitors (${growth})`;
 
   await sendEmail(email, subject, html);
 };
@@ -268,7 +280,7 @@ export const scheduleOnboardingTipEmail = async (
     );
 
     const response = await resend.emails.send({
-      from: "Rybbit <automail@email.rybbit.com>",
+      from: EMAIL_FROM,
       to: email,
       subject: tipContent.subject,
       html,
@@ -323,7 +335,7 @@ export const sendReengagementEmail = async (
     );
 
     await resend.emails.send({
-      from: "Rybbit <automail@email.rybbit.com>",
+      from: EMAIL_FROM,
       to: email,
       subject: content.subject,
       html,

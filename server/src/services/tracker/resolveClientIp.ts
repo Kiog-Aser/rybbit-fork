@@ -54,6 +54,15 @@ function cfConnectingIp(request: FastifyRequest): string | null {
   return cfIp && typeof cfIp === "string" ? cfIp.trim() : null;
 }
 
+function vercelForwardedIp(request: FastifyRequest): string | null {
+  const raw = request.headers["x-vercel-forwarded-for"];
+  if (raw && typeof raw === "string") {
+    const first = raw.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return null;
+}
+
 /**
  * Cloudflare sets this documented synthetic IP as `CF-Connecting-IP` on
  * cross-zone Worker subrequests — the topology produced by the first-party
@@ -104,6 +113,11 @@ export function resolveClientIp(
     // forwarded headers entirely.
     return cfIp;
   }
+
+  // Vercel first-party rewrites (site → analytics origin): visitor IP is in
+  // x-vercel-forwarded-for / x-forwarded-for; socket IP is the edge egress.
+  const vercelIp = vercelForwardedIp(request);
+  if (vercelIp) return vercelIp;
 
   // No Cloudflare edge (e.g. self-hosted behind nginx): there's no edge IP to
   // corroborate, so defer to plain header precedence (X-Real-IP, then

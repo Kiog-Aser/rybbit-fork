@@ -138,7 +138,8 @@
       console.error("Script src attribute is missing");
       return null;
     }
-    const analyticsHost = src.split("/script.js")[0];
+    const explicitApiHost = scriptTag.getAttribute("data-api-host")?.replace(/\/$/, "") || "";
+    const analyticsHost = explicitApiHost || src.split("/script.js")[0];
     if (!analyticsHost) {
       console.error("Please provide a valid analytics host");
       return null;

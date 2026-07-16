@@ -8,11 +8,12 @@ import Link from "next/link";
 import { ReactNode, useEffect, useMemo } from "react";
 import { useInfiniteMetric } from "../../../../../api/analytics/hooks/useGetMetric";
 import { MetricResponse } from "../../../../../api/analytics/endpoints";
+import { useRevenueByDimension } from "../../../../../api/revenue/hooks";
 import { ErrorState } from "../../../../../components/ErrorState";
 import { CardLoader } from "../../../../../components/ui/card";
 import { ScrollArea } from "../../../../../components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../../../components/ui/tooltip";
-import { IS_CLOUD } from "../../../../../lib/const";
+import { IS_CLOUD, REVENUE_ATTRIBUTION } from "../../../../../lib/const";
 import { Row } from "./Row";
 import { StandardSkeleton } from "./Skeleton";
 import { StandardSectionDialog } from "./StandardSectionDialog";
@@ -78,6 +79,7 @@ export function StandardSection({
   });
 
   const itemsForDisplay = useMemo(() => data?.pages.flatMap(page => page.data), [data]);
+  const { byValue: revenueByValue } = useRevenueByDimension(filterParameter);
 
   useEffect(() => {
     if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage && !isLoading) {
@@ -115,7 +117,10 @@ export function StandardSection({
             </Tooltip>
           )}
         </div>
-        <div>{countLabel || t("Sessions")}</div>
+        <div className="flex gap-3">
+          {REVENUE_ATTRIBUTION && <span className="text-accent-400/80">{t("Revenue")}</span>}
+          <span>{countLabel || t("Sessions")}</span>
+        </div>
       </div>
       <ScrollArea className="h-[314px]">
         <div className="flex flex-col gap-2 overflow-x-hidden">
@@ -140,6 +145,7 @@ export function StandardSection({
                       filterParameter={filterParameter}
                       getSubrowLabel={getSubrowLabel}
                       hasSubrow={hasSubrow}
+                      revenueCents={revenueByValue.get(getValue(e))}
                     />
                   ))
               ) : (

@@ -344,6 +344,105 @@ export async function getRevenueTotals(siteId: number, startTime: string, endTim
   return row ?? { revenue_cents: 0, payment_count: 0, paying_users: 0 };
 }
 
+export type RevenueDimensionKey =
+  | "channel"
+  | "referrer"
+  | "pathname"
+  | "country"
+  | "device_type"
+  | "browser"
+  | "operating_system";
+
+export type RevenueByDimensionRow = {
+  value: string;
+  revenue_cents: number;
+  payment_count: number;
+};
+
+/**
+ * Revenue totals broken down by a traffic dimension.
+ * channel / referrer / pathname come from revenue_events attribution metadata.
+ * country / device / browser / OS are joined via session_id → events.
+ */
+export async function getRevenueByDimension(
+  siteId: number,
+  startTime: string,
+  endTime: string,
+  dimension: RevenueDimensionKey
+): Promise<RevenueByDimensionRow[]> {
+  const nativeColumns: RevenueDimensionKey[] = ["channel", "referrer", "pathname"];
+
+  let dimExpr: string;
+  let needsSessionJoin = false;
+
+  if (nativeColumns.includes(dimension)) {
+    if (dimension === "channel") {
+      dimExpr = `if(channel = '', 'direct', channel)`;
+    } else if (dimension === "referrer") {
+      dimExpr = `if(referrer = '', 'direct', domainWithoutWWW(referrer))`;
+    } else {
+      dimExpr = `if(pathname = '', '/', pathname)`;
+    }
+  } else {
+    needsSessionJoin = true;
+    dimExpr = `if(session_dim = '', 'unknown', session_dim)`;
+  }
+
+  const sessionJoin =
+    needsSessionJoin
+      ? `
+      LEFT JOIN (
+        SELECT
+          session_id,
+          any(${dimension === "country" ? "country" : dimension}) AS session_dim
+        FROM events
+        WHERE site_id = {siteId:UInt16}
+          AND timestamp >= parseDateTimeBestEffort({startTime:String}) - INTERVAL 30 DAY
+          AND timestamp <= parseDateTimeBestEffort({endTime:String})
+        GROUP BY session_id
+      ) s ON payments.session_id = s.session_id
+    `
+      : "";
+
+  const valueSelect = needsSessionJoin
+    ? dimExpr
+    : dimExpr;
+
+  const result = await clickhouse.query({
+    query: `
+      SELECT
+        ${valueSelect} AS value,
+        sum(amount_cents) AS revenue_cents,
+        count() AS payment_count
+      FROM (
+        SELECT
+          stripe_payment_id,
+          max(amount_cents) AS amount_cents,
+          any(session_id) AS session_id,
+          any(channel) AS channel,
+          any(referrer) AS referrer,
+          any(pathname) AS pathname
+        FROM revenue_events
+        WHERE site_id = {siteId:UInt16}
+          AND timestamp >= parseDateTimeBestEffort({startTime:String})
+          AND timestamp <= parseDateTimeBestEffort({endTime:String})
+          AND status = 'succeeded'
+          AND stripe_payment_id LIKE 'pi_%'
+        GROUP BY stripe_payment_id
+      ) payments
+      ${sessionJoin}
+      GROUP BY value
+      HAVING value != '' AND value != 'unknown'
+      ORDER BY revenue_cents DESC
+      LIMIT 100
+    `,
+    query_params: { siteId, startTime, endTime },
+    format: "JSONEachRow",
+  });
+
+  return (await result.json()) as RevenueByDimensionRow[];
+}
+
 export function getStripeClientForSite(connection: { restrictedKeyEncrypted: string }) {
   const key = decryptSecret(connection.restrictedKeyEncrypted);
   return new Stripe(key, { typescript: true, maxNetworkRetries: 2 });

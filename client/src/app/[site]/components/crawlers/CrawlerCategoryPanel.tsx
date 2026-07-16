@@ -11,7 +11,11 @@ import { getChartTimeBounds } from "../../../../components/charts/timeSeriesChar
 import { CrawlerLogo } from "../../../../components/CrawlerLogo";
 import { CardLoader } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { getCrawlerBrandStyle, getCrawlerDisplayName } from "../../../../lib/botCrawlerNames";
+import {
+  aggregateCrawlerRows,
+  getCrawlerBrandStyle,
+  type CrawlerPurposeCategory,
+} from "../../../../lib/botCrawlerNames";
 import { formatChartDateTime } from "../../../../lib/dateTimeUtils";
 import { getTimezone, useStore } from "../../../../lib/store";
 import { type BotCategoryFilter } from "../../bots/botsStore";
@@ -119,7 +123,12 @@ export function CrawlerCategoryPanel({
           )}
         </div>
 
-        <CrawlerList items={crawlerItems} loading={crawlersLoading} maxHeight={chartHeight} />
+        <CrawlerList
+          items={crawlerItems}
+          loading={crawlersLoading}
+          maxHeight={chartHeight}
+          category={category as CrawlerPurposeCategory}
+        />
       </div>
     </div>
   );
@@ -129,33 +138,35 @@ export function CrawlerList({
   items,
   loading,
   maxHeight,
+  category = "all",
 }: {
   items: { value: string; count: number }[];
   loading: boolean;
   maxHeight: number;
+  category?: CrawlerPurposeCategory;
 }) {
   const t = useExtracted();
+  const aggregated = aggregateCrawlerRows(items, category);
 
   return (
     <div className="space-y-0.5 overflow-y-auto pr-1" style={{ maxHeight }}>
       {loading ? (
         Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full rounded-md" />)
-      ) : items.length === 0 ? (
+      ) : aggregated.length === 0 ? (
         <p className="text-xs text-muted-foreground py-6 text-center">{t("No crawlers yet")}</p>
       ) : (
-        items.map(item => {
-          const label = getCrawlerDisplayName(item.value);
-          const brand = getCrawlerBrandStyle(label);
+        aggregated.map(item => {
+          const brand = getCrawlerBrandStyle(item.label);
           return (
             <div
-              key={item.value}
+              key={item.label}
               className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5"
               style={{ backgroundColor: brand.background }}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <CrawlerLogo label={label} size={16} />
+                <CrawlerLogo label={item.label} size={16} />
                 <span className="text-xs font-medium truncate" style={{ color: brand.foreground }}>
-                  {label}
+                  {item.label}
                 </span>
               </div>
               <span className="text-xs font-semibold tabular-nums shrink-0" style={{ color: brand.foreground }}>

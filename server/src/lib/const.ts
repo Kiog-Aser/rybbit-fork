@@ -5,6 +5,19 @@ dotenv.config();
 export const IS_CLOUD = process.env.CLOUD === "true";
 export const DEPLOYMENT = process.env.DEPLOYMENT;
 export const AKASH_LEAN_MODE = process.env.AKASH_LEAN_MODE === "true";
+/** Public site URL for links in emails (no trailing slash). */
+export const PUBLIC_BASE_URL = (process.env.BASE_URL || "https://analytics.milh.tech").replace(/\/$/, "");
+/** Resend API key — when set, transactional + weekly report email is enabled. */
+export const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || "";
+export const EMAIL_ENABLED = Boolean(RESEND_API_KEY);
+/** From header for Resend, e.g. "Analytics <reports@yourdomain.com>" */
+export const EMAIL_FROM =
+  process.env.EMAIL_FROM?.trim() ||
+  (IS_CLOUD ? "Rybbit <automail@email.rybbit.com>" : "Analytics <onboarding@resend.dev>");
+/** Enable weekly analytics email cron when email is configured (or cloud). */
+export const WEEKLY_REPORTS_ENABLED =
+  process.env.WEEKLY_REPORTS_ENABLED === "true" ||
+  (process.env.WEEKLY_REPORTS_ENABLED !== "false" && (IS_CLOUD || EMAIL_ENABLED));
 /** Skip loading ~75MB GeoLite DBs into RAM — saves ~100MB+ on Akash pods. Country stays empty unless CF headers are used. */
 export const DISABLE_GEOLITE =
   process.env.DISABLE_GEOLITE === "true" || (AKASH_LEAN_MODE && process.env.DISABLE_GEOLITE !== "false");

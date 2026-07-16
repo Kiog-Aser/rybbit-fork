@@ -264,7 +264,15 @@ export const getIpAddress = (request: FastifyRequest): string => {
     return realIp.trim();
   }
 
-  // Priority 2: X-Forwarded-For - use the first IP, which should be the original
+  // Priority 2: Vercel / edge platform client IP (set when a first-party proxy
+  // rewrites track to the analytics origin). Prefer over generic XFF when present.
+  const vercelForwarded = request.headers["x-vercel-forwarded-for"];
+  if (vercelForwarded && typeof vercelForwarded === "string") {
+    const first = vercelForwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+
+  // Priority 3: X-Forwarded-For - use the first IP, which should be the original
   // client. Ranks above CF-Connecting-IP so proxied traffic is attributed to the
   // visitor rather than the proxy's edge node.
   const forwardedFor = request.headers["x-forwarded-for"];

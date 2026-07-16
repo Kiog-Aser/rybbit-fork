@@ -4,6 +4,7 @@ export {
   getStripeRevenueStatus,
   syncStripeRevenue,
 } from "./connectStripe.js";
+export { getRevenueByDimensionHandler } from "./getRevenueByDimension.js";
 export { getRevenueOverviewHandler } from "./getRevenueOverview.js";
 export { getRevenueTimeSeriesHandler } from "./getRevenueTimeSeries.js";
 export { stripeRevenueWebhook } from "./stripeRevenueWebhook.js";

@@ -83,3 +83,22 @@ export async function fetchRevenueTimeSeries(
   );
   return response.data;
 }
+
+export type RevenueByDimensionRow = {
+  value: string;
+  revenue_cents: number;
+  payment_count: number;
+};
+
+export async function fetchRevenueByDimension(
+  siteId: string | number,
+  startTime: string,
+  endTime: string,
+  parameter: string
+) {
+  const params = new URLSearchParams({ startTime, endTime, parameter });
+  const response = await authedFetch<{ data: RevenueByDimensionRow[] }>(
+    `/sites/${siteId}/revenue/by-dimension?${params.toString()}`
+  );
+  return response.data;
+}

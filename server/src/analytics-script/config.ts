@@ -94,7 +94,12 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
     return null;
   }
 
-  const analyticsHost = src.split("/script.js")[0];
+  // Prefer explicit API host so first-party script proxies (e.g. /analytics/script.js
+  // via Vercel rewrites) still POST track events directly to the analytics origin.
+  // Without this, track goes through the rewrite and geo resolves to the CDN edge
+  // (often Frankfurt) instead of the visitor.
+  const explicitApiHost = scriptTag.getAttribute("data-api-host")?.replace(/\/$/, "") || "";
+  const analyticsHost = explicitApiHost || src.split("/script.js")[0];
   if (!analyticsHost) {
     console.error("Please provide a valid analytics host");
     return null;

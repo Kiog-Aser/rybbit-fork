@@ -5,17 +5,24 @@ import { db } from "../../db/postgres/postgres.js";
 import { organization, member, user, sites } from "../../db/postgres/schema.js";
 import { clickhouse } from "../../db/clickhouse/clickhouse.js";
 import { processResults } from "../../api/analytics/utils/utils.js";
+import { getBotPurposeExpression } from "../../api/analytics/bots/utils.js";
 import { createServiceLogger } from "../../lib/logger/logger.js";
 import { sendWeeklyReportEmail } from "../../lib/email/email.js";
 import { filterSitesByMemberAccess } from "../../lib/siteAccess.js";
-import { IS_CLOUD } from "../../lib/const.js";
-import type { OverviewData, MetricData, SiteReport, OrganizationReport } from "./weeklyReportTypes.js";
+import { EMAIL_ENABLED, PUBLIC_BASE_URL, REVENUE_ATTRIBUTION, WEEKLY_REPORTS_ENABLED } from "../../lib/const.js";
+import { getRevenueTotals } from "../revenue/stripeRevenueService.js";
+import type {
+  OverviewData,
+  MetricData,
+  SiteReport,
+  OrganizationReport,
+  AiCrawlerSummary,
+  RevenueSummary,
+} from "./weeklyReportTypes.js";
 
 class WeeklyReportService {
   private cronTask: cron.ScheduledTask | null = null;
   private logger = createServiceLogger("weekly-report");
-
-  constructor() {}
 
   private async fetchOverviewData(siteId: number, startDate: string, endDate: string): Promise<OverviewData | null> {
     try {
@@ -28,7 +35,6 @@ class WeeklyReportService {
         page_stats.users
       FROM
       (
-          -- Session-level metrics
           SELECT
               COUNT() AS sessions,
               AVG(pages_in_session) AS pages_per_session,
@@ -36,7 +42,6 @@ class WeeklyReportService {
               AVG(end_time - start_time) AS session_duration
           FROM
               (
-                  -- One row per session
                   SELECT
                       session_id,
                       MIN(timestamp) AS start_time,
@@ -52,7 +57,6 @@ class WeeklyReportService {
           ) AS session_stats
           CROSS JOIN
           (
-              -- Page-level and user-level metrics
               SELECT
                   COUNT(*)                   AS pageviews,
                   COUNT(DISTINCT user_id)    AS users
@@ -67,11 +71,7 @@ class WeeklyReportService {
       const result = await clickhouse.query({
         query,
         format: "JSONEachRow",
-        query_params: {
-          siteId,
-          startDate,
-          endDate,
-        },
+        query_params: { siteId, startDate, endDate },
       });
 
       const data = await processResults<OverviewData>(result);
@@ -97,8 +97,7 @@ class WeeklyReportService {
           WITH PageStats AS (
             SELECT
               country as value,
-              COUNT(distinct(session_id)) as unique_sessions,
-              COUNT() as pageviews
+              COUNT(distinct(session_id)) as unique_sessions
             FROM events
             WHERE
                 site_id = {siteId:Int32}
@@ -117,34 +116,16 @@ class WeeklyReportService {
           LIMIT {limit:Int32}`;
       } else if (parameter === "pathname") {
         query = `
-          WITH EventTimes AS (
+          WITH PathStats AS (
               SELECT
-                  session_id,
                   pathname,
-                  timestamp,
-                  leadInFrame(timestamp) OVER (PARTITION BY session_id ORDER BY timestamp ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) as next_timestamp
+                  count(DISTINCT session_id) as unique_sessions
               FROM events
               WHERE
                 site_id = {siteId:Int32}
                 AND type = 'pageview'
                 AND timestamp >= toDateTime({startDate:String})
                 AND timestamp < toDateTime({endDate:String})
-          ),
-          PageDurations AS (
-              SELECT
-                  session_id,
-                  pathname,
-                  timestamp,
-                  next_timestamp,
-                  if(isNull(next_timestamp), 0, dateDiff('second', timestamp, next_timestamp)) as time_diff_seconds
-              FROM EventTimes
-          ),
-          PathStats AS (
-              SELECT
-                  pathname,
-                  count() as visits,
-                  count(DISTINCT session_id) as unique_sessions
-              FROM PageDurations
               GROUP BY pathname
           )
           SELECT
@@ -159,8 +140,7 @@ class WeeklyReportService {
           WITH PageStats AS (
             SELECT
               domainWithoutWWW(referrer) as value,
-              COUNT(distinct(session_id)) as unique_sessions,
-              COUNT() as pageviews
+              COUNT(distinct(session_id)) as unique_sessions
             FROM events
             WHERE
                 site_id = {siteId:Int32}
@@ -177,18 +157,17 @@ class WeeklyReportService {
           FROM PageStats
           ORDER BY count desc
           LIMIT {limit:Int32}`;
-      } else if (parameter === "device_type") {
+      } else if (parameter === "device_type" || parameter === "browser" || parameter === "operating_system") {
         query = `
           WITH PageStats AS (
             SELECT
-              device_type as value,
-              COUNT(distinct(session_id)) as unique_sessions,
-              COUNT() as pageviews
+              ${parameter} as value,
+              COUNT(distinct(session_id)) as unique_sessions
             FROM events
             WHERE
                 site_id = {siteId:Int32}
-                AND device_type IS NOT NULL
-                AND device_type <> ''
+                AND ${parameter} IS NOT NULL
+                AND ${parameter} <> ''
                 AND timestamp >= toDateTime({startDate:String})
                 AND timestamp < toDateTime({endDate:String})
             GROUP BY value
@@ -202,15 +181,12 @@ class WeeklyReportService {
           LIMIT {limit:Int32}`;
       }
 
+      if (!query) return [];
+
       const result = await clickhouse.query({
         query,
         format: "JSONEachRow",
-        query_params: {
-          siteId,
-          startDate,
-          endDate,
-          limit,
-        },
+        query_params: { siteId, startDate, endDate, limit },
       });
 
       return await processResults<MetricData>(result);
@@ -220,44 +196,175 @@ class WeeklyReportService {
     }
   }
 
+  private async fetchRevenueSummary(
+    siteId: number,
+    currentStart: string,
+    currentEnd: string,
+    previousStart: string,
+    previousEnd: string
+  ): Promise<RevenueSummary | null> {
+    if (!REVENUE_ATTRIBUTION) return null;
+    try {
+      const [current, previous] = await Promise.all([
+        getRevenueTotals(siteId, currentStart, currentEnd),
+        getRevenueTotals(siteId, previousStart, previousEnd),
+      ]);
+      return {
+        revenue_cents: current.revenue_cents ?? 0,
+        payment_count: current.payment_count ?? 0,
+        paying_users: current.paying_users ?? 0,
+        previous_revenue_cents: previous.revenue_cents ?? 0,
+      };
+    } catch (error) {
+      this.logger.error({ error, siteId }, "Error fetching revenue for weekly report");
+      return null;
+    }
+  }
+
+  private async fetchAiCrawlerSummary(
+    siteId: number,
+    startDate: string,
+    endDate: string
+  ): Promise<AiCrawlerSummary | null> {
+    try {
+      const purpose = getBotPurposeExpression();
+      const overviewResult = await clickhouse.query({
+        query: `
+          SELECT
+            count() AS total_requests,
+            countIf(purpose = 'ai_answers') AS ai_answers,
+            countIf(purpose = 'indexing') AS indexing,
+            countIf(purpose = 'training') AS training
+          FROM (
+            SELECT ${purpose} AS purpose
+            FROM bot_events
+            WHERE site_id = {siteId:Int32}
+              AND timestamp >= toDateTime({startDate:String})
+              AND timestamp < toDateTime({endDate:String})
+          )
+          WHERE purpose != ''
+        `,
+        format: "JSONEachRow",
+        query_params: { siteId, startDate, endDate },
+      });
+      const [overview] = await processResults<{
+        total_requests: number;
+        ai_answers: number;
+        indexing: number;
+        training: number;
+      }>(overviewResult);
+
+      if (!overview || overview.total_requests === 0) {
+        return {
+          total_requests: 0,
+          ai_answers: 0,
+          indexing: 0,
+          training: 0,
+          topAgents: [],
+          topPages: [],
+        };
+      }
+
+      const agentsResult = await clickhouse.query({
+        query: `
+          SELECT
+            matched_ua_pattern as value,
+            count() as count,
+            round(count() * 100.0 / sum(count()) OVER (), 2) as percentage
+          FROM bot_events
+          WHERE site_id = {siteId:Int32}
+            AND timestamp >= toDateTime({startDate:String})
+            AND timestamp < toDateTime({endDate:String})
+            AND matched_ua_pattern != ''
+            AND ${purpose} = 'ai_answers'
+          GROUP BY matched_ua_pattern
+          ORDER BY count DESC
+          LIMIT 5
+        `,
+        format: "JSONEachRow",
+        query_params: { siteId, startDate, endDate },
+      });
+
+      const pagesResult = await clickhouse.query({
+        query: `
+          SELECT
+            pathname as value,
+            count() as count,
+            round(count() * 100.0 / sum(count()) OVER (), 2) as percentage
+          FROM bot_events
+          WHERE site_id = {siteId:Int32}
+            AND timestamp >= toDateTime({startDate:String})
+            AND timestamp < toDateTime({endDate:String})
+            AND pathname != ''
+            AND ${purpose} = 'ai_answers'
+          GROUP BY pathname
+          ORDER BY count DESC
+          LIMIT 5
+        `,
+        format: "JSONEachRow",
+        query_params: { siteId, startDate, endDate },
+      });
+
+      return {
+        total_requests: overview.total_requests,
+        ai_answers: overview.ai_answers,
+        indexing: overview.indexing,
+        training: overview.training,
+        topAgents: await processResults<MetricData>(agentsResult),
+        topPages: await processResults<MetricData>(pagesResult),
+      };
+    } catch (error) {
+      // bot_events may not exist yet on older DBs
+      this.logger.warn({ error, siteId }, "AI crawler summary unavailable for weekly report");
+      return null;
+    }
+  }
+
   private async generateSiteReport(siteId: number, siteName: string, siteDomain: string): Promise<SiteReport | null> {
     try {
-      // Use UTC timezone for consistency
       const now = DateTime.utc();
-
-      // Calculate current week (last 7 days)
       const currentWeekEnd = now;
       const currentWeekStart = now.minus({ days: 7 });
-
-      // Calculate previous week (8-14 days ago)
       const previousWeekEnd = currentWeekStart;
       const previousWeekStart = currentWeekStart.minus({ days: 7 });
-
-      // Format dates for ClickHouse (YYYY-MM-DD HH:mm:ss)
       const formatDate = (date: DateTime) => date.toFormat("yyyy-MM-dd HH:mm:ss");
 
-      const [currentWeek, previousWeek, topCountries, topPages, topReferrers, deviceBreakdown] = await Promise.all([
-        this.fetchOverviewData(siteId, formatDate(currentWeekStart), formatDate(currentWeekEnd)),
-        this.fetchOverviewData(siteId, formatDate(previousWeekStart), formatDate(previousWeekEnd)),
-        this.fetchTopN(siteId, "country", formatDate(currentWeekStart), formatDate(currentWeekEnd), 5),
-        this.fetchTopN(siteId, "pathname", formatDate(currentWeekStart), formatDate(currentWeekEnd), 5),
-        this.fetchTopN(siteId, "referrer", formatDate(currentWeekStart), formatDate(currentWeekEnd), 5),
-        this.fetchTopN(siteId, "device_type", formatDate(currentWeekStart), formatDate(currentWeekEnd), 5),
+      const currentStart = formatDate(currentWeekStart);
+      const currentEnd = formatDate(currentWeekEnd);
+      const previousStart = formatDate(previousWeekStart);
+      const previousEnd = formatDate(previousWeekEnd);
+
+      const [
+        currentWeek,
+        previousWeek,
+        topCountries,
+        topPages,
+        topReferrers,
+        deviceBreakdown,
+        browserBreakdown,
+        revenue,
+        aiCrawlers,
+      ] = await Promise.all([
+        this.fetchOverviewData(siteId, currentStart, currentEnd),
+        this.fetchOverviewData(siteId, previousStart, previousEnd),
+        this.fetchTopN(siteId, "country", currentStart, currentEnd, 5),
+        this.fetchTopN(siteId, "pathname", currentStart, currentEnd, 5),
+        this.fetchTopN(siteId, "referrer", currentStart, currentEnd, 5),
+        this.fetchTopN(siteId, "device_type", currentStart, currentEnd, 5),
+        this.fetchTopN(siteId, "browser", currentStart, currentEnd, 3),
+        this.fetchRevenueSummary(siteId, currentStart, currentEnd, previousStart, previousEnd),
+        this.fetchAiCrawlerSummary(siteId, currentStart, currentEnd),
       ]);
 
-      if (!currentWeek) {
-        return null;
-      }
-
-      // Skip sites with no pageviews
-      if (!currentWeek.pageviews || currentWeek.pageviews === 0) {
-        return null;
-      }
+      if (!currentWeek) return null;
+      if (!currentWeek.pageviews || currentWeek.pageviews === 0) return null;
 
       return {
         siteId,
         siteName,
         siteDomain,
+        periodStart: currentWeekStart.toFormat("dd MMM"),
+        periodEnd: currentWeekEnd.toFormat("dd MMM yyyy"),
         currentWeek,
         previousWeek: previousWeek || {
           sessions: 0,
@@ -271,6 +378,10 @@ class WeeklyReportService {
         topPages,
         topReferrers,
         deviceBreakdown,
+        browserBreakdown,
+        revenue,
+        aiCrawlers,
+        dashboardUrl: `${PUBLIC_BASE_URL}/${siteId}`,
       };
     } catch (error) {
       this.logger.error({ error, siteId }, "Error generating site report");
@@ -280,32 +391,19 @@ class WeeklyReportService {
 
   private async generateOrganizationReport(organizationId: string): Promise<OrganizationReport | null> {
     try {
-      // Fetch organization details
       const [org] = await db.select().from(organization).where(eq(organization.id, organizationId));
+      if (!org) return null;
 
-      if (!org) {
-        return null;
-      }
-
-      // Fetch all sites for this organization
       const orgSites = await db.select().from(sites).where(eq(sites.organizationId, org.id));
-
-      if (orgSites.length === 0) {
-        return null;
-      }
+      if (orgSites.length === 0) return null;
 
       const siteReports: SiteReport[] = [];
-
       for (const site of orgSites) {
         const report = await this.generateSiteReport(site.siteId, site.name, site.domain);
-        if (report) {
-          siteReports.push(report);
-        }
+        if (report) siteReports.push(report);
       }
 
-      if (siteReports.length === 0) {
-        return null;
-      }
+      if (siteReports.length === 0) return null;
 
       return {
         organizationId: org.id,
@@ -320,7 +418,6 @@ class WeeklyReportService {
 
   private async sendReportsToOrganization(report: OrganizationReport): Promise<void> {
     try {
-      // Fetch all members of the organization with their access restrictions
       const members = await db
         .select({
           memberId: member.id,
@@ -335,14 +432,9 @@ class WeeklyReportService {
         .innerJoin(user, eq(member.userId, user.id))
         .where(eq(member.organizationId, report.organizationId));
 
-      // Send a separate email for each site to each member
       for (const memberData of members) {
-        // Skip users who have disabled email reports
-        if (memberData.sendAutoEmailReports === false) {
-          continue;
-        }
+        if (memberData.sendAutoEmailReports === false) continue;
 
-        // Only report on sites the member can actually access
         let allowedSites = report.sites;
         if (memberData.role === "member") {
           allowedSites = await filterSitesByMemberAccess(
@@ -352,15 +444,10 @@ class WeeklyReportService {
             memberData.memberId,
             memberData.hasRestrictedSiteAccess
           );
-
-          // Skip this member entirely if they have no site access
-          if (allowedSites.length === 0) {
-            continue;
-          }
+          if (allowedSites.length === 0) continue;
         }
 
         for (const site of allowedSites) {
-
           try {
             await sendWeeklyReportEmail(memberData.email, memberData.name, report.organizationName, site);
             this.logger.info(
@@ -386,38 +473,32 @@ class WeeklyReportService {
   }
 
   public async generateAndSendReports(): Promise<void> {
-    if (!IS_CLOUD) {
-      this.logger.info("Skipping weekly reports for non-cloud instance");
+    if (!WEEKLY_REPORTS_ENABLED) {
+      this.logger.info("Skipping weekly reports (WEEKLY_REPORTS_ENABLED=false or no RESEND_API_KEY)");
       return;
+    }
+    if (!EMAIL_ENABLED) {
+      this.logger.warn("Weekly reports enabled but RESEND_API_KEY is missing — emails will not send");
     }
 
     this.logger.info("Starting weekly report generation and sending");
 
     try {
-      // Fetch all organizations
       const organizations = await db.select().from(organization);
       const totalOrgs = organizations.length;
-
       this.logger.info({ totalOrganizations: totalOrgs }, "Processing organizations");
 
       let processedCount = 0;
       let sentCount = 0;
 
-      for (let i = 0; i < organizations.length; i++) {
-        const org = organizations[i];
-
-        // Generate report for this organization
+      for (const org of organizations) {
         const report = await this.generateOrganizationReport(org.id);
-
         if (report) {
-          // Send reports immediately after generation
           await this.sendReportsToOrganization(report);
           sentCount++;
         }
-
         processedCount++;
 
-        // Log progress every 10 organizations
         if (processedCount % 10 === 0 || processedCount === totalOrgs) {
           this.logger.info(
             { processed: processedCount, total: totalOrgs, sent: sentCount },
@@ -435,17 +516,24 @@ class WeeklyReportService {
     }
   }
 
+  /** Generate a report for one site (for testing / manual triggers). */
+  public async generateSiteReportForId(siteId: number): Promise<SiteReport | null> {
+    const [site] = await db.select().from(sites).where(eq(sites.siteId, siteId));
+    if (!site) return null;
+    return this.generateSiteReport(site.siteId, site.name, site.domain);
+  }
+
   private initializeWeeklyReportCron(): void {
-    if (!IS_CLOUD) {
-      this.logger.info("Skipping weekly report cron initialization for non-cloud instance");
+    if (!WEEKLY_REPORTS_ENABLED) {
+      this.logger.info("Skipping weekly report cron (not enabled)");
       return;
     }
 
     this.logger.info("Initializing weekly report cron");
 
-    // Schedule weekly reports to run every Monday at midnight UTC
+    // Every Monday at 09:00 UTC (closer to “morning report” than midnight)
     this.cronTask = cron.schedule(
-      "0 0 * * 1",
+      "0 9 * * 1",
       async () => {
         try {
           await this.generateAndSendReports();
@@ -456,7 +544,7 @@ class WeeklyReportService {
       { timezone: "UTC" }
     );
 
-    this.logger.info("Weekly report cron initialized (runs every Monday at midnight UTC)");
+    this.logger.info("Weekly report cron initialized (Mondays 09:00 UTC)");
   }
 
   public stopWeeklyReportCron(): void {
@@ -471,5 +559,4 @@ class WeeklyReportService {
   }
 }
 
-// Create a singleton instance
 export const weeklyReportService = new WeeklyReportService();

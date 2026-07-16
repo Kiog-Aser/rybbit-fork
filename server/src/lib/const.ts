@@ -10,10 +10,10 @@ export const PUBLIC_BASE_URL = (process.env.BASE_URL || "https://analytics.milh.
 /** Resend API key — when set, transactional + weekly report email is enabled. */
 export const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || "";
 export const EMAIL_ENABLED = Boolean(RESEND_API_KEY);
-/** From header for Resend, e.g. "Analytics <reports@yourdomain.com>" */
+/** From header for Resend, e.g. "Analytics <reports@mails.milh.tech>" */
 export const EMAIL_FROM =
   process.env.EMAIL_FROM?.trim() ||
-  (IS_CLOUD ? "Rybbit <automail@email.rybbit.com>" : "Analytics <onboarding@resend.dev>");
+  (IS_CLOUD ? "Rybbit <automail@email.rybbit.com>" : "Analytics <reports@mails.milh.tech>");
 /** Enable weekly analytics email cron when email is configured (or cloud). */
 export const WEEKLY_REPORTS_ENABLED =
   process.env.WEEKLY_REPORTS_ENABLED === "true" ||

@@ -15,7 +15,7 @@ Self-hosted email uses [Resend](https://resend.com). Without a key, auth emails 
 # In docker-compose.yml under backend.environment:
 - RESEND_API_KEY=re_xxxxxxxx
 # Optional overrides:
-- EMAIL_FROM=Analytics <reports@yourdomain.com>   # must be a verified Resend domain
+- EMAIL_FROM=Analytics <reports@mails.milh.tech>   # must be a verified Resend domain
 - WEEKLY_REPORTS_ENABLED=true                      # default: on when RESEND_API_KEY is set
 - BASE_URL=https://analytics.yourdomain.com        # used in report dashboard links
 ```

@@ -19,6 +19,8 @@ export type GetBotOverviewResponse = Record<BotLayerKey, number> & {
 export type BotTimeSeriesPoint = {
   time: string;
   bot_requests: number;
+  /** Present when groupBy=crawler */
+  crawler?: string;
 };
 
 export type GetBotTimeSeriesResponse = BotTimeSeriesPoint[];
@@ -41,6 +43,8 @@ export interface BotTimeSeriesParams extends CommonApiParams {
   bucket: TimeBucket;
   layer?: BotLayerKey | null;
   category?: BotCategoryFilter | null;
+  /** "crawler" → one series row per (time, matched_ua_pattern) */
+  groupBy?: "crawler" | null;
 }
 
 export interface BotDimensionParams extends CommonApiParams, PaginationParams {
@@ -75,6 +79,7 @@ export async function fetchBotTimeSeries(
     bucket: params.bucket,
     layer: params.layer || undefined,
     category: params.category && params.category !== "all" ? params.category : undefined,
+    groupBy: params.groupBy || undefined,
   });
   return response.data;
 }

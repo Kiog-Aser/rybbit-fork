@@ -1,20 +1,29 @@
 "use client";
 
+/**
+ * Insights — DataFast-style full-screen report for the last 30 days.
+ * Layout mirrors DataFast's bento (center identity, left revenue-share cards,
+ * right acquisition/conversion) while using Rybbit design tokens only:
+ * tight radii, flat surfaces, emerald accent, periwinkle dataviz.
+ */
+
 import NumberFlow from "@number-flow/react";
-import { ArrowLeft } from "lucide-react";
+import { ResponsiveLine } from "@nivo/line";
+import { ArrowLeft, Globe2, Wallet } from "lucide-react";
 import { DateTime } from "luxon";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useExtracted } from "next-intl";
 import { useMemo } from "react";
 import { useGetOverview } from "../../../api/analytics/hooks/useGetOverview";
+import { useGetOverviewBucketed } from "../../../api/analytics/hooks/useGetOverviewBucketed";
 import { usePaginatedMetric } from "../../../api/analytics/hooks/useGetMetric";
 import { useCurrentSite } from "../../../api/admin/hooks/useSites";
-import { useRevenueByDimension, useRevenueOverview } from "../../../api/revenue/hooks";
+import { useRevenueByDimension, useRevenueOverview, useRevenueTimeSeries } from "../../../api/revenue/hooks";
 import { Time } from "../../../components/DateSelector/types";
 import { Favicon } from "../../../components/Favicon";
-import { Skeleton } from "../../../components/ui/skeleton";
 import { useSetPageTitle } from "../../../hooks/useSetPageTitle";
+import { useNivoTheme } from "../../../lib/nivo";
 import { REVENUE_ATTRIBUTION } from "../../../lib/const";
 import { getMainDashboardPath } from "../../../lib/siteRoute";
 import { getTimezone, useStore } from "../../../lib/store";
@@ -24,7 +33,6 @@ import { Browser } from "../components/shared/icons/Browser";
 import { DeviceIcon } from "../components/shared/icons/Device";
 import { OperatingSystem } from "../components/shared/icons/OperatingSystem";
 
-/** Fixed rolling last-30-days window — independent of dashboard date filter. */
 function useLast30Days(): Time {
   return useMemo(() => {
     const tz = getTimezone();
@@ -38,47 +46,24 @@ function useLast30Days(): Time {
   }, []);
 }
 
-function formatMoney(cents: number) {
+function money(cents: number, precise = false) {
   return (cents / 100).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: precise ? 2 : 0,
+    maximumFractionDigits: precise ? 2 : 0,
   });
 }
 
-function formatMoneyPrecise(cents: number) {
-  return (cents / 100).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+function pct(n: number, digits = 0) {
+  return `${n.toFixed(digits)}%`;
 }
 
-function formatPeriod(time: Time): string {
-  if (time.mode === "range" && time.startDate && time.endDate) {
-    const start = DateTime.fromISO(time.startDate);
-    const end = DateTime.fromISO(time.endDate);
-    if (start.year === end.year) {
-      return `${start.toFormat("MMM d")} – ${end.toFormat("MMM d, yyyy")}`;
-    }
-    return `${start.toFormat("MMM d, yyyy")} – ${end.toFormat("MMM d, yyyy")}`;
-  }
-  return "Last 30 days";
-}
-
-/** Flat panel — design system radii (~4.8px), no shadow, surface token. */
-function Panel({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div
       className={cn(
-        "rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 p-3 min-h-0 overflow-hidden",
+        "rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 min-h-0 overflow-hidden",
         className
       )}
     >
@@ -87,83 +72,140 @@ function Panel({
   );
 }
 
-function PanelLabel({ children }: { children: React.ReactNode }) {
+function Label({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className="text-[11px] font-medium text-muted-foreground mb-1.5 tracking-tight">{children}</p>
+    <p className={cn("text-[10px] font-medium uppercase tracking-wide text-muted-foreground", className)}>
+      {children}
+    </p>
   );
 }
 
-function Metric({
-  label,
-  value,
-  accent,
-  loading,
-  large,
+/** "93% revenue from Desktop ($6.7k)" style insight card */
+function RevenueShareCard({
+  icon,
+  headline,
+  amountCents,
+  sharePct,
+  subline,
 }: {
-  label: string;
-  value: React.ReactNode;
-  accent?: boolean;
-  loading?: boolean;
-  large?: boolean;
+  icon: React.ReactNode;
+  headline: string;
+  amountCents: number;
+  sharePct: number;
+  subline?: string;
 }) {
   return (
-    <Panel className="flex flex-col justify-center">
-      <PanelLabel>{label}</PanelLabel>
-      {loading ? (
-        <Skeleton className="h-7 w-16" />
-      ) : (
-        <div
-          className={cn(
-            "font-semibold tabular-nums tracking-tight",
-            large ? "text-2xl md:text-3xl" : "text-xl md:text-2xl",
-            accent ? "text-emerald-500 dark:text-emerald-400" : "text-foreground"
-          )}
-        >
-          {value}
-        </div>
-      )}
+    <Panel className="p-3 flex gap-3 items-start">
+      <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-background">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold leading-snug text-foreground">
+          {pct(sharePct)} {headline}{" "}
+          <span className="text-muted-foreground font-medium">({money(amountCents)})</span>
+        </p>
+        {subline && <p className="mt-1 text-[11px] text-muted-foreground leading-snug">{subline}</p>}
+      </div>
     </Panel>
   );
 }
 
-function RankList({
+function RankColumn({
   title,
-  loading,
   rows,
   empty,
+  valueAccent,
 }: {
   title: string;
-  loading: boolean;
   empty: string;
-  rows: Array<{ key: string; label: React.ReactNode; primary: string; secondary?: string }>;
+  valueAccent?: boolean;
+  rows: Array<{ key: string; label: React.ReactNode; value: string }>;
 }) {
   return (
-    <Panel className="flex flex-col">
-      <PanelLabel>{title}</PanelLabel>
-      {loading ? (
-        <div className="space-y-1.5 flex-1">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-5 w-full" />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center flex-1">{empty}</p>
+    <div className="min-h-0 flex flex-col p-3">
+      <Label className="mb-2">{title}</Label>
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">{empty}</p>
       ) : (
-        <div className="flex flex-col gap-0.5 min-h-0 overflow-hidden">
-          {rows.map(row => (
-            <div key={row.key} className="flex items-center justify-between gap-2 text-xs py-0.5 min-w-0">
-              <div className="min-w-0 flex-1 truncate text-foreground/90">{row.label}</div>
-              <div className="flex items-center gap-2 shrink-0 tabular-nums">
-                {row.secondary && <span className="text-muted-foreground">{row.secondary}</span>}
-                <span className="font-medium text-emerald-500 dark:text-emerald-400 min-w-[2.5rem] text-right">
-                  {row.primary}
-                </span>
-              </div>
+        <div className="flex flex-col gap-1.5 min-h-0 overflow-hidden">
+          {rows.map(r => (
+            <div key={r.key} className="flex items-center justify-between gap-2 text-xs min-w-0">
+              <div className="min-w-0 truncate">{r.label}</div>
+              <span
+                className={cn(
+                  "tabular-nums shrink-0 font-medium",
+                  valueAccent ? "text-emerald-500 dark:text-emerald-400" : "text-foreground"
+                )}
+              >
+                {r.value}
+              </span>
             </div>
           ))}
         </div>
       )}
-    </Panel>
+    </div>
+  );
+}
+
+function MiniBarChart({
+  items,
+  empty,
+}: {
+  items: Array<{ label: string; value: number }>;
+  empty: string;
+}) {
+  const max = Math.max(1, ...items.map(i => i.value));
+  if (!items.some(i => i.value > 0)) {
+    return <p className="text-[11px] text-muted-foreground py-6 text-center">{empty}</p>;
+  }
+  return (
+    <div className="flex items-end gap-1 h-16 w-full px-1">
+      {items.map(item => (
+        <div key={item.label} className="flex-1 flex flex-col items-center gap-1 min-w-0 h-full justify-end">
+          <div
+            className="w-full max-w-[18px] mx-auto rounded-sm bg-emerald-500/70 dark:bg-emerald-500/60"
+            style={{ height: `${Math.max(4, (item.value / max) * 100)}%` }}
+            title={`${item.label}: ${item.value}`}
+          />
+          <span className="text-[9px] text-muted-foreground truncate w-full text-center">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Heatmap({
+  cells,
+  peakLabel,
+}: {
+  cells: number[][]; // 7 days x 6 buckets (4h)
+  peakLabel?: string;
+}) {
+  const max = Math.max(1, ...cells.flat());
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  return (
+    <div className="flex flex-col gap-1.5 h-full">
+      <div className="grid grid-cols-7 gap-0.5 flex-1 content-start">
+        {days.map((d, di) => (
+          <div key={d} className="flex flex-col gap-0.5">
+            {cells[di]?.map((v, hi) => (
+              <div
+                key={hi}
+                className="aspect-square rounded-[2px]"
+                style={{
+                  backgroundColor:
+                    v <= 0
+                      ? "rgba(255,255,255,0.04)"
+                      : `rgba(16, 185, 129, ${0.15 + (v / max) * 0.85})`,
+                }}
+                title={`${d} bucket ${hi + 1}: ${v}`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      {peakLabel && <p className="text-[10px] text-muted-foreground leading-snug">{peakLabel}</p>}
+    </div>
   );
 }
 
@@ -173,29 +215,33 @@ export default function InsightsPage() {
   const last30 = useLast30Days();
   const siteId = useStore(s => s.site);
   const { site } = useCurrentSite();
+  const nivoTheme = useNivoTheme();
 
-  // Same lite overview path as the main dashboard for consistent visitor counts.
   const { data: overview, isLoading: overviewLoading } = useGetOverview({
     site: siteId,
     overrideTime: last30,
     useFilters: false,
     lite: true,
   });
-  const { data: revenue, isLoading: revenueLoading } = useRevenueOverview(last30);
-  const { data: revenueCountries, isLoading: revCountriesLoading } = useRevenueByDimension("country", last30);
-  const { data: revenueChannels, isLoading: revChannelsLoading } = useRevenueByDimension("channel", last30);
-  const { data: revenueReferrers, isLoading: revReferrersLoading } = useRevenueByDimension("referrer", last30);
+  const { data: bucketed } = useGetOverviewBucketed({
+    site: siteId,
+    bucket: "day",
+    overrideTime: last30,
+    useFilters: false,
+    lite: true,
+  });
+  const { data: revenue } = useRevenueOverview(last30);
+  const { data: revSeries } = useRevenueTimeSeries(last30, "day");
+
+  const { data: revDevices } = useRevenueByDimension("device_type", last30);
+  const { data: revOs } = useRevenueByDimension("operating_system", last30);
+  const { data: revBrowsers } = useRevenueByDimension("browser", last30);
+  const { data: revCountries } = useRevenueByDimension("country", last30);
+  const { data: revReferrers } = useRevenueByDimension("referrer", last30);
+
   const { data: devices } = usePaginatedMetric({
     parameter: "device_type",
-    limit: 5,
-    page: 1,
-    lite: true,
-    useFilters: false,
-    customTime: last30,
-  });
-  const { data: browsers } = usePaginatedMetric({
-    parameter: "browser",
-    limit: 5,
+    limit: 10,
     page: 1,
     lite: true,
     useFilters: false,
@@ -203,15 +249,31 @@ export default function InsightsPage() {
   });
   const { data: systems } = usePaginatedMetric({
     parameter: "operating_system",
-    limit: 5,
+    limit: 10,
     page: 1,
     lite: true,
     useFilters: false,
     customTime: last30,
   });
-  const { data: pages } = usePaginatedMetric({
-    parameter: "pathname",
-    limit: 5,
+  const { data: browsers } = usePaginatedMetric({
+    parameter: "browser",
+    limit: 10,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
+  const { data: countries } = usePaginatedMetric({
+    parameter: "country",
+    limit: 20,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
+  const { data: referrers } = usePaginatedMetric({
+    parameter: "referrer",
+    limit: 20,
     page: 1,
     lite: true,
     useFilters: false,
@@ -222,87 +284,313 @@ export default function InsightsPage() {
 
   const days = 30;
   const visitors = overview?.data?.users ?? 0;
-  const sessions = overview?.data?.sessions ?? 0;
-  const bounce = overview?.data?.bounce_rate ?? 0;
-  const durationSec = overview?.data?.session_duration ?? 0;
   const revenueCents = revenue?.totals.revenue_cents ?? 0;
-  const payingUsers = revenue?.totals.paying_users ?? 0;
   const paymentCount = revenue?.totals.payment_count ?? 0;
-
+  const payingUsers = revenue?.totals.paying_users ?? 0;
+  const buyers = payingUsers > 0 ? payingUsers : paymentCount;
   const avgDailyVisitors = visitors / days;
   const avgDailyRevenue = revenueCents / days;
   const revPerVisitor = visitors > 0 ? revenueCents / visitors : 0;
-  const conversionRate = visitors > 0 ? (payingUsers / visitors) * 100 : 0;
+  const conversionRate = visitors > 0 ? (buyers / visitors) * 100 : 0;
 
   const domain = site?.domain ?? "";
   const siteName = site?.name || domain || t("Your site");
-  const period = formatPeriod(last30);
-  const timezone = getTimezone();
+  const periodLabel = t("last 30 days");
   const backHref = getMainDashboardPath(pathname) ?? "/";
 
-  const topDevice = devices?.data?.[0];
-  const topBrowser = browsers?.data?.[0];
-  const topOs = systems?.data?.[0];
+  const totalRev = Math.max(1, revenueCents);
 
-  // Insight cards: % of revenue from top segment
-  const topDeviceRev = useMemo(() => {
-    if (!devices?.data?.length || !REVENUE_ATTRIBUTION) return null;
-    // device revenue not always available; use session share as proxy when needed
-    const d = devices.data[0];
-    return { name: d.value, pct: d.percentage };
-  }, [devices?.data]);
+  // —— Left insight cards: revenue share by device / OS / browser ——
+  const deviceShare = useMemo(() => {
+    const rows = revDevices ?? [];
+    if (rows.length === 0) {
+      // Fall back to session share when Stripe payments lack session attribution
+      const top = devices?.data?.[0];
+      const second = devices?.data?.[1];
+      if (!top) return null;
+      return {
+        value: top.value,
+        share: top.percentage,
+        amount: 0,
+        sub: second ? `${Math.round(second.percentage)}% ${t("from")} ${second.value}` : undefined,
+        fallback: true,
+      };
+    }
+    const top = rows[0];
+    const rest = rows
+      .slice(1, 3)
+      .map(r => `${Math.round((r.revenue_cents / totalRev) * 100)}% ${t("from")} ${r.value}`)
+      .join(", ");
+    return {
+      value: top.value,
+      share: (top.revenue_cents / totalRev) * 100,
+      amount: top.revenue_cents,
+      sub: rest || undefined,
+      fallback: false,
+    };
+  }, [revDevices, devices?.data, totalRev, t]);
 
-  const countryRows = useMemo(() => {
-    return (revenueCountries ?? []).slice(0, 5).map(row => ({
-      key: row.value,
+  const osShare = useMemo(() => {
+    const rows = revOs ?? [];
+    if (rows.length === 0) {
+      const top = systems?.data?.[0];
+      const others = (systems?.data ?? []).slice(1, 3);
+      if (!top) return null;
+      return {
+        value: top.value,
+        share: top.percentage,
+        amount: 0,
+        sub: others.map(o => `${Math.round(o.percentage)}% ${t("from")} ${o.value}`).join(", ") || undefined,
+        fallback: true,
+      };
+    }
+    const top = rows[0];
+    const rest = rows
+      .slice(1, 3)
+      .map(r => `${Math.round((r.revenue_cents / totalRev) * 100)}% ${t("from")} ${r.value}`)
+      .join(", ");
+    return {
+      value: top.value,
+      share: (top.revenue_cents / totalRev) * 100,
+      amount: top.revenue_cents,
+      sub: rest || undefined,
+      fallback: false,
+    };
+  }, [revOs, systems?.data, totalRev, t]);
+
+  const browserShare = useMemo(() => {
+    const rows = revBrowsers ?? [];
+    if (rows.length === 0) {
+      const top = browsers?.data?.[0];
+      const others = (browsers?.data ?? []).slice(1, 3);
+      if (!top) return null;
+      return {
+        value: top.value,
+        share: top.percentage,
+        amount: 0,
+        sub: others.map(o => `${Math.round(o.percentage)}% ${t("from")} ${o.value}`).join(", ") || undefined,
+        fallback: true,
+      };
+    }
+    const top = rows[0];
+    const rest = rows
+      .slice(1, 3)
+      .map(r => `${Math.round((r.revenue_cents / totalRev) * 100)}% ${t("from")} ${r.value}`)
+      .join(", ");
+    return {
+      value: top.value,
+      share: (top.revenue_cents / totalRev) * 100,
+      amount: top.revenue_cents,
+      sub: rest || undefined,
+      fallback: false,
+    };
+  }, [revBrowsers, browsers?.data, totalRev, t]);
+
+  // —— Countries: top revenue + top conversion (payments / visitors) ——
+  const countryRevenueRows = useMemo(() => {
+    return (revCountries ?? []).slice(0, 5).map(r => ({
+      key: r.value,
       label: (
         <span className="inline-flex items-center gap-1.5 min-w-0">
-          <CountryFlag country={row.value} />
-          <span className="truncate">{getCountryName(row.value) || row.value}</span>
+          <CountryFlag country={r.value} />
+          <span className="truncate">{getCountryName(r.value) || r.value}</span>
         </span>
       ),
-      primary: formatMoney(row.revenue_cents),
-      secondary: `${row.payment_count}`,
+      value: money(r.revenue_cents),
     }));
-  }, [revenueCountries]);
+  }, [revCountries]);
 
-  const channelRows = useMemo(() => {
-    return (revenueChannels ?? []).slice(0, 5).map(row => ({
-      key: row.value,
-      label: <span className="capitalize truncate">{row.value}</span>,
-      primary: formatMoney(row.revenue_cents),
-    }));
-  }, [revenueChannels]);
+  const countryConversionRows = useMemo(() => {
+    const revMap = new Map((revCountries ?? []).map(r => [r.value, r.payment_count]));
+    const rows = (countries?.data ?? [])
+      .map(c => {
+        const payments = revMap.get(c.value) ?? 0;
+        const rate = c.count > 0 ? (payments / c.count) * 100 : 0;
+        return { value: c.value, rate, payments };
+      })
+      .filter(r => r.payments > 0)
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 5);
 
-  const referrerRows = useMemo(() => {
-    return (revenueReferrers ?? []).slice(0, 5).map(row => ({
-      key: row.value,
+    // If no attributed revenue by country, show top countries by visitors as weak signal
+    if (rows.length === 0) {
+      return (countries?.data ?? []).slice(0, 5).map(c => ({
+        key: c.value,
+        label: (
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <CountryFlag country={c.value} />
+            <span className="truncate">{getCountryName(c.value) || c.value}</span>
+          </span>
+        ),
+        value: pct(c.percentage, 1),
+      }));
+    }
+    return rows.map(r => ({
+      key: r.value,
       label: (
         <span className="inline-flex items-center gap-1.5 min-w-0">
-          {row.value !== "direct" && <Favicon domain={row.value} className="w-3 h-3" />}
-          <span className="truncate">{row.value === "direct" ? t("Direct") : row.value}</span>
+          <CountryFlag country={r.value} />
+          <span className="truncate">{getCountryName(r.value) || r.value}</span>
         </span>
       ),
-      primary: formatMoney(row.revenue_cents),
+      value: pct(r.rate, 2),
     }));
-  }, [revenueReferrers, t]);
+  }, [revCountries, countries?.data]);
 
-  const pageRows = useMemo(() => {
-    return (pages?.data ?? []).slice(0, 5).map(row => ({
-      key: row.value,
-      label: <span className="truncate font-mono text-[11px]">{row.value || "/"}</span>,
-      primary: row.count.toLocaleString(),
-      secondary: `${round(row.percentage)}%`,
+  // —— Referrers: top revenue + top conversion ——
+  const referrerRevenueRows = useMemo(() => {
+    return (revReferrers ?? []).slice(0, 5).map(r => ({
+      key: r.value,
+      label: (
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          {r.value !== "direct" && <Favicon domain={r.value} className="w-3 h-3" />}
+          <span className="truncate">{r.value === "direct" ? t("Direct") : r.value}</span>
+        </span>
+      ),
+      value: money(r.revenue_cents),
     }));
-  }, [pages?.data]);
+  }, [revReferrers, t]);
+
+  const referrerConversionRows = useMemo(() => {
+    const revMap = new Map((revReferrers ?? []).map(r => [r.value, r.payment_count]));
+    const rows = (referrers?.data ?? [])
+      .map(c => {
+        const payments = revMap.get(c.value) ?? 0;
+        const rate = c.count > 0 ? (payments / c.count) * 100 : 0;
+        return { value: c.value, rate, payments };
+      })
+      .filter(r => r.payments > 0)
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 5);
+
+    if (rows.length === 0) {
+      return (referrers?.data ?? []).slice(0, 5).map(c => ({
+        key: c.value,
+        label: (
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            {c.value !== "Direct" && c.value !== "direct" && <Favicon domain={c.value} className="w-3 h-3" />}
+            <span className="truncate">{c.value}</span>
+          </span>
+        ),
+        value: pct(c.percentage, 1),
+      }));
+    }
+    return rows.map(r => ({
+      key: r.value,
+      label: (
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          {r.value !== "direct" && <Favicon domain={r.value} className="w-3 h-3" />}
+          <span className="truncate">{r.value === "direct" ? t("Direct") : r.value}</span>
+        </span>
+      ),
+      value: pct(r.rate, 2),
+    }));
+  }, [revReferrers, referrers?.data, t]);
+
+  // —— Rev / visitor growth line (daily) ——
+  const revPerVisitorSeries = useMemo(() => {
+    const visitorsByDay = new Map<string, number>();
+    for (const row of bucketed?.data ?? []) {
+      const day = DateTime.fromSQL(row.time).toISODate() ?? row.time.slice(0, 10);
+      visitorsByDay.set(day, (visitorsByDay.get(day) ?? 0) + (row.users ?? 0));
+    }
+    const revByDay = new Map<string, number>();
+    for (const row of revSeries ?? []) {
+      const day = DateTime.fromISO(row.time).toISODate() ?? row.time.slice(0, 10);
+      revByDay.set(day, (revByDay.get(day) ?? 0) + row.revenue_cents);
+    }
+    const daysKeys = [...new Set([...visitorsByDay.keys(), ...revByDay.keys()])].sort();
+    return daysKeys.map(day => {
+      const v = visitorsByDay.get(day) ?? 0;
+      const r = revByDay.get(day) ?? 0;
+      return {
+        x: day,
+        y: v > 0 ? r / 100 / v : 0,
+      };
+    });
+  }, [bucketed?.data, revSeries]);
+
+  // —— Purchase timing from payment timestamps (works without session link) ——
+  const purchaseHeatmap = useMemo(() => {
+    // 7 days × 6 four-hour buckets; filled from revenue series if we only have day buckets
+    // Without hour-level payment data in the client series, derive a soft heatmap from daily payments.
+    const cells: number[][] = Array.from({ length: 7 }, () => Array(6).fill(0));
+    let peak = { dow: 0, bucket: 0, value: 0 };
+    for (const row of revSeries ?? []) {
+      const dt = DateTime.fromISO(row.time);
+      if (!dt.isValid) continue;
+      // luxon weekday 1=Mon..7=Sun → 0..6
+      const dow = dt.weekday - 1;
+      const bucket = Math.min(5, Math.floor(dt.hour / 4));
+      cells[dow][bucket] += row.payment_count;
+      if (cells[dow][bucket] > peak.value) {
+        peak = { dow, bucket, value: cells[dow][bucket] };
+      }
+    }
+    const dayNames = [
+      t("Monday"),
+      t("Tuesday"),
+      t("Wednesday"),
+      t("Thursday"),
+      t("Friday"),
+      t("Saturday"),
+      t("Sunday"),
+    ];
+    const hourStart = peak.bucket * 4;
+    const peakLabel =
+      peak.value > 0
+        ? t("Conversion peak on {day} around {hour}", {
+            day: dayNames[peak.dow],
+            hour: `${hourStart}:00`,
+          })
+        : undefined;
+    return { cells, peakLabel };
+  }, [revSeries, t]);
+
+  // Days-to-purchase buckets — without session attribution we show empty chart
+  const daysToPurchase = useMemo(
+    () => [
+      { label: "24h", value: 0 },
+      { label: "1d", value: 0 },
+      { label: "2d", value: 0 },
+      { label: "3d", value: 0 },
+      { label: "1w", value: 0 },
+      { label: "2w", value: 0 },
+      { label: "1m+", value: 0 },
+    ],
+    []
+  );
+
+  // Visits-to-purchase — needs session-linked payments
+  const visitsToPurchase = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, i) => ({
+        label: i === 9 ? "10+" : String(i + 1),
+        value: 0,
+      })),
+    []
+  );
+
+  const firstVisitPct = paymentCount > 0 ? 0 : 0; // unknown without session attribution
+
+  const shareHeadline = (kind: "device" | "os" | "browser", value: string, fallback: boolean) => {
+    if (fallback) {
+      if (kind === "device") return t("of sessions on {value}", { value });
+      if (kind === "os") return t("of sessions on {value}", { value });
+      return t("of sessions in {value}", { value });
+    }
+    if (kind === "device") return t("revenue from {value}", { value });
+    if (kind === "os") return t("revenue from {value} users", { value });
+    return t("revenue from {value} users", { value });
+  };
 
   return (
     <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Top chrome */}
-      <div className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-neutral-200 dark:border-neutral-800">
+      {/* Minimal chrome */}
+      <div className="flex items-center justify-between px-3 py-2 shrink-0">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-neutral-100 dark:hover:bg-neutral-850 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
           {t("Dashboard")}
@@ -312,192 +600,237 @@ export default function InsightsPage() {
         </span>
       </div>
 
-      {/* Bento — one viewport, no page scroll */}
-      <div className="flex-1 min-h-0 p-2 md:p-3 grid grid-cols-12 grid-rows-[auto_1fr_1fr_auto] gap-2">
-        {/* Hero identity */}
-        <Panel className="col-span-12 md:col-span-4 row-span-1 md:row-span-2 flex flex-col items-center justify-center text-center gap-2 py-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-850">
-            {domain ? (
-              <Favicon domain={domain} className="h-8 w-8 rounded-sm" />
-            ) : (
-              <span className="text-xl font-semibold text-emerald-500">R</span>
-            )}
+      {/*
+        DataFast-style 3-column bento:
+        left = revenue-share insights + countries
+        center = identity + averages + rev/visitor
+        right = acquisition + conversion + events/heatmap
+      */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2 p-2 pt-0 overflow-hidden">
+        {/* ── LEFT ── */}
+        <div className="lg:col-span-3 min-h-0 flex flex-col gap-2 overflow-hidden">
+          {deviceShare ? (
+            <RevenueShareCard
+              icon={<DeviceIcon deviceType={deviceShare.value} size={22} />}
+              headline={shareHeadline("device", deviceShare.value, deviceShare.fallback)}
+              amountCents={deviceShare.amount}
+              sharePct={deviceShare.share}
+              subline={deviceShare.sub}
+            />
+          ) : (
+            <Panel className="p-3 text-xs text-muted-foreground">{t("No device data")}</Panel>
+          )}
+          {osShare ? (
+            <RevenueShareCard
+              icon={<OperatingSystem os={osShare.value} size={22} />}
+              headline={shareHeadline("os", osShare.value, osShare.fallback)}
+              amountCents={osShare.amount}
+              sharePct={osShare.share}
+              subline={osShare.sub}
+            />
+          ) : (
+            <Panel className="p-3 text-xs text-muted-foreground">{t("No OS data")}</Panel>
+          )}
+          {browserShare ? (
+            <RevenueShareCard
+              icon={<Browser browser={browserShare.value} size={22} />}
+              headline={shareHeadline("browser", browserShare.value, browserShare.fallback)}
+              amountCents={browserShare.amount}
+              sharePct={browserShare.share}
+              subline={browserShare.sub}
+            />
+          ) : (
+            <Panel className="p-3 text-xs text-muted-foreground">{t("No browser data")}</Panel>
+          )}
+
+          {/* First visit + visits to purchase */}
+          <div className="grid grid-cols-5 gap-2 min-h-0 flex-1">
+            <Panel className="col-span-2 p-3 flex flex-col justify-center">
+              <p className="text-3xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
+                {pct(firstVisitPct)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
+                {t("of buyers purchase on first visit")}
+              </p>
+              <p className="mt-2 text-[10px] text-muted-foreground/70">
+                {t("Needs Stripe session attribution")}
+              </p>
+            </Panel>
+            <Panel className="col-span-3 p-3 flex flex-col">
+              <Label className="mb-2">{t("Visits to purchase")}</Label>
+              <div className="flex-1 min-h-0">
+                <MiniBarChart items={visitsToPurchase} empty={t("Link payments to sessions to unlock")} />
+              </div>
+            </Panel>
           </div>
-          <div>
-            <h1 className="text-lg md:text-xl font-semibold tracking-tight">{siteName}</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">{period}</p>
-            <p className="text-[10px] text-muted-foreground/70">{timezone}</p>
+
+          {/* Countries */}
+          <Panel className="grid grid-cols-2 min-h-[120px]">
+            <RankColumn
+              title={t("Top revenue")}
+              empty={t("No revenue in this period")}
+              valueAccent
+              rows={countryRevenueRows}
+            />
+            <div className="border-l border-neutral-200 dark:border-neutral-800">
+              <RankColumn
+                title={t("Top conversion")}
+                empty={t("No conversions yet")}
+                rows={countryConversionRows}
+              />
+            </div>
+          </Panel>
+        </div>
+
+        {/* ── CENTER ── */}
+        <div className="lg:col-span-5 min-h-0 flex flex-col gap-2 overflow-hidden">
+          {/* Avg daily metrics */}
+          <div className="grid grid-cols-2 gap-2 shrink-0">
+            <Panel className="p-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-background">
+                <Globe2 className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold tabular-nums leading-none">
+                  {overviewLoading ? "—" : <NumberFlow value={Math.round(avgDailyVisitors)} />}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{t("avg. daily visitors")}</p>
+              </div>
+            </Panel>
+            <Panel className="p-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-background">
+                <Wallet className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold tabular-nums leading-none text-emerald-500 dark:text-emerald-400">
+                  {REVENUE_ATTRIBUTION ? money(avgDailyRevenue, true) : "—"}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{t("avg. daily revenue")}</p>
+              </div>
+            </Panel>
           </div>
-          <div className="mt-1 grid w-full max-w-xs grid-cols-2 gap-2">
-            <div className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-background px-2 py-2">
-              <p className="text-[10px] text-muted-foreground">{t("Avg. daily visitors")}</p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums">
-                {overviewLoading ? (
-                  "—"
+
+          {/* Identity hero */}
+          <Panel className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-4 py-6 relative">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.06),transparent_65%)]" />
+            <div className="relative flex flex-col items-center gap-3">
+              <div className="flex h-20 w-20 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-background shadow-none">
+                {domain ? (
+                  <Favicon domain={domain} className="h-11 w-11 rounded-sm" />
                 ) : (
-                  <NumberFlow
-                    value={Math.round(avgDailyVisitors)}
-                    format={{ notation: avgDailyVisitors >= 1000 ? "compact" : "standard" }}
-                  />
+                  <span className="text-2xl font-semibold text-emerald-500">R</span>
                 )}
-              </p>
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{domain || siteName}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{periodLabel}</p>
+              </div>
             </div>
-            <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-2 py-2">
-              <p className="text-[10px] text-muted-foreground">{t("Avg. daily revenue")}</p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
-                {!REVENUE_ATTRIBUTION || revenueLoading ? "—" : formatMoneyPrecise(avgDailyRevenue)}
-              </p>
+          </Panel>
+
+          {/* Rev / visitor growth + big number */}
+          <Panel className="p-3 flex flex-col gap-2 shrink-0 h-[180px]">
+            <Label>{t("Rev / visitor growth")}</Label>
+            <div className="flex-1 min-h-0">
+              {revPerVisitorSeries.length > 1 ? (
+                <ResponsiveLine
+                  data={[{ id: "rpv", data: revPerVisitorSeries }]}
+                  theme={nivoTheme}
+                  margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  xScale={{ type: "point" }}
+                  yScale={{ type: "linear", min: 0, max: "auto" }}
+                  enableGridX={false}
+                  enableGridY={false}
+                  axisTop={null}
+                  axisRight={null}
+                  axisBottom={null}
+                  axisLeft={null}
+                  enablePoints={false}
+                  enableArea
+                  areaOpacity={0.12}
+                  curve="monotoneX"
+                  colors={["#10b981"]}
+                  animate={false}
+                  isInteractive
+                  useMesh
+                  enableSlices="x"
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                  {t("Not enough data yet")}
+                </div>
+              )}
             </div>
+            <p className="text-3xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400 text-center">
+              {money(revPerVisitor, true)}
+            </p>
+            <p className="text-[11px] text-muted-foreground text-center -mt-1">{t("revenue per visitor")}</p>
+          </Panel>
+        </div>
+
+        {/* ── RIGHT ── */}
+        <div className="lg:col-span-4 min-h-0 flex flex-col gap-2 overflow-hidden">
+          {/* Top revenue / conversion referrers */}
+          <Panel className="grid grid-cols-2 min-h-[140px] shrink-0">
+            <RankColumn
+              title={t("Top revenue")}
+              empty={t("No revenue in this period")}
+              valueAccent
+              rows={referrerRevenueRows}
+            />
+            <div className="border-l border-neutral-200 dark:border-neutral-800">
+              <RankColumn
+                title={t("Top conversion")}
+                empty={t("No conversions yet")}
+                rows={referrerConversionRows}
+              />
+            </div>
+          </Panel>
+
+          {/* Days to purchase + median */}
+          <div className="grid grid-cols-5 gap-2 shrink-0">
+            <Panel className="col-span-3 p-3">
+              <Label className="mb-2">{t("Days to purchase")}</Label>
+              <MiniBarChart items={daysToPurchase} empty={t("Link payments to sessions to unlock")} />
+            </Panel>
+            <Panel className="col-span-2 p-3 flex flex-col justify-center items-center text-center">
+              <p className="text-3xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">—</p>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
+                {t("hours median to purchase")}
+              </p>
+            </Panel>
           </div>
-        </Panel>
 
-        {/* KPI strip */}
-        <div className="col-span-12 md:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Metric
-            label={t("Visitors")}
-            loading={overviewLoading}
-            value={<NumberFlow value={visitors} format={{ notation: "compact" }} />}
-          />
-          <Metric
-            label={t("Sessions")}
-            loading={overviewLoading}
-            value={<NumberFlow value={sessions} format={{ notation: "compact" }} />}
-          />
-          <Metric
-            label={t("Revenue")}
-            loading={revenueLoading}
-            accent
-            value={REVENUE_ATTRIBUTION ? formatMoney(revenueCents) : "—"}
-          />
-          <Metric
-            label={t("Rev / visitor")}
-            loading={revenueLoading || overviewLoading}
-            accent
-            value={REVENUE_ATTRIBUTION ? formatMoneyPrecise(revPerVisitor) : "—"}
-          />
-        </div>
+          {/* Big conversion rate */}
+          <Panel className="p-4 flex flex-col items-center justify-center shrink-0">
+            <p className="text-4xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
+              {pct(conversionRate, 2)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("conversion rate")}</p>
+          </Panel>
 
-        <div className="col-span-12 md:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Metric
-            label={t("Conversion rate")}
-            loading={revenueLoading || overviewLoading}
-            value={REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
-          />
-          <Metric
-            label={t("Paying visitors")}
-            loading={revenueLoading}
-            value={REVENUE_ATTRIBUTION ? payingUsers.toLocaleString() : "—"}
-          />
-          <Metric label={t("Bounce rate")} loading={overviewLoading} value={`${Math.round(bounce)}%`} />
-          <Metric
-            label={t("Avg. session")}
-            loading={overviewLoading}
-            value={durationSec ? `${Math.round(durationSec / 60)}m ${Math.round(durationSec % 60)}s` : "—"}
-          />
+          {/* Events + heatmap */}
+          <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
+            <Panel className="p-3 flex flex-col min-h-0">
+              <Label className="mb-2">{t("Top converting events")}</Label>
+              <p className="text-[11px] text-muted-foreground flex-1 flex items-center justify-center text-center px-2">
+                {t("Event → purchase funnels unlock with session-linked payments")}
+              </p>
+            </Panel>
+            <Panel className="p-3 flex flex-col min-h-0">
+              <Heatmap cells={purchaseHeatmap.cells} peakLabel={purchaseHeatmap.peakLabel} />
+            </Panel>
+          </div>
         </div>
-
-        {/* Audience */}
-        <Panel className="col-span-4 md:col-span-2">
-          <PanelLabel>{t("Top device")}</PanelLabel>
-          {topDevice ? (
-            <div className="flex items-center gap-2 mt-1">
-              <DeviceIcon deviceType={topDevice.value} size={22} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{topDevice.value}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {round(topDevice.percentage)}% {t("of sessions")}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">—</p>
-          )}
-        </Panel>
-        <Panel className="col-span-4 md:col-span-2">
-          <PanelLabel>{t("Top browser")}</PanelLabel>
-          {topBrowser ? (
-            <div className="flex items-center gap-2 mt-1">
-              <Browser browser={topBrowser.value} size={22} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{topBrowser.value}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {round(topBrowser.percentage)}% {t("of sessions")}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">—</p>
-          )}
-        </Panel>
-        <Panel className="col-span-4 md:col-span-2">
-          <PanelLabel>{t("Top OS")}</PanelLabel>
-          {topOs ? (
-            <div className="flex items-center gap-2 mt-1">
-              <OperatingSystem os={topOs.value} size={22} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{topOs.value}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {round(topOs.percentage)}% {t("of sessions")}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">—</p>
-          )}
-        </Panel>
-        <Panel className="col-span-12 md:col-span-2 flex flex-col justify-center">
-          <PanelLabel>{t("Conversion rate")}</PanelLabel>
-          <p className="text-2xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
-            {REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
-          </p>
-        </Panel>
-
-        {/* Rankings */}
-        <div className="col-span-12 md:col-span-3 min-h-0">
-          <RankList
-            title={t("Top revenue by country")}
-            loading={revCountriesLoading}
-            empty={t("No revenue in this period")}
-            rows={countryRows}
-          />
-        </div>
-        <div className="col-span-12 md:col-span-3 min-h-0">
-          <RankList
-            title={t("Top revenue by channel")}
-            loading={revChannelsLoading}
-            empty={t("No revenue in this period")}
-            rows={channelRows}
-          />
-        </div>
-        <div className="col-span-12 md:col-span-3 min-h-0">
-          <RankList
-            title={t("Top revenue by referrer")}
-            loading={revReferrersLoading}
-            empty={t("No revenue in this period")}
-            rows={referrerRows}
-          />
-        </div>
-        <div className="col-span-12 md:col-span-3 min-h-0">
-          <RankList title={t("Top pages")} loading={false} empty={t("No pageviews yet")} rows={pageRows} />
-        </div>
-
-        {REVENUE_ATTRIBUTION && paymentCount > 0 && (
-          <p className="col-span-12 text-center text-[10px] text-muted-foreground pb-1">
-            {paymentCount.toLocaleString()} {t("successful payments")} · {payingUsers.toLocaleString()}{" "}
-            {t("paying visitors")} · {t("conversion")} {conversionRate.toFixed(2)}%
-            {topDeviceRev && (
-              <>
-                {" "}
-                · {round(topDeviceRev.pct)}% {t("sessions on")} {topDeviceRev.name}
-              </>
-            )}
-          </p>
-        )}
       </div>
+
+      {/* Footer strip */}
+      {REVENUE_ATTRIBUTION && paymentCount > 0 && (
+        <p className="shrink-0 text-center text-[10px] text-muted-foreground pb-2 px-3">
+          {paymentCount.toLocaleString()} {t("successful payments")} · {buyers.toLocaleString()}{" "}
+          {t("paying visitors")} · {t("conversion")} {pct(conversionRate, 2)}
+        </p>
+      )}
     </div>
   );
-}
-
-function round(n: number) {
-  return Math.round(n * 10) / 10;
 }

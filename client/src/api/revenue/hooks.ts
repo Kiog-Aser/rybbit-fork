@@ -94,15 +94,17 @@ export function useRevenueOverview(overrideTime?: Time) {
   });
 }
 
-export function useRevenueTimeSeries() {
+export function useRevenueTimeSeries(overrideTime?: Time, bucketOverride?: string) {
   const { site, time, bucket } = useStore();
-  const params = buildApiParams(time, { filters: undefined });
+  const timeToUse = overrideTime ?? time;
+  const bucketToUse = bucketOverride ?? bucket;
+  const params = buildApiParams(timeToUse, { filters: undefined });
   const { startTime, endTime } = revenueTimeRange(params);
   const timeZone = getTimezone();
 
   return useQuery({
-    queryKey: ["revenue-time-series", site, time, bucket],
-    queryFn: () => fetchRevenueTimeSeries(site!, startTime, endTime, bucket, timeZone),
+    queryKey: ["revenue-time-series", site, timeToUse, bucketToUse],
+    queryFn: () => fetchRevenueTimeSeries(site!, startTime, endTime, bucketToUse, timeZone),
     enabled: Boolean(site) && REVENUE_ATTRIBUTION,
   });
 }

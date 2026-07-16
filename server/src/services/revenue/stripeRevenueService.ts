@@ -318,12 +318,21 @@ export async function getRevenueTotals(siteId: number, startTime: string, endTim
       SELECT
         sum(amount_cents) AS revenue_cents,
         count() AS payment_count,
-        uniqExactIf(customer_email_hash, customer_email_hash != '') AS paying_users
+        -- Prefer email hash; fall back to user_id / payment id so self-host
+        -- Stripe imports without metadata still count buyers.
+        uniqExact(
+          if(
+            customer_email_hash != '',
+            customer_email_hash,
+            if(user_id != '', user_id, stripe_payment_id)
+          )
+        ) AS paying_users
       FROM (
         SELECT
           stripe_payment_id,
           max(amount_cents) AS amount_cents,
-          any(customer_email_hash) AS customer_email_hash
+          any(customer_email_hash) AS customer_email_hash,
+          any(user_id) AS user_id
         FROM revenue_events
         WHERE site_id = {siteId:UInt16}
           AND timestamp >= parseDateTimeBestEffort({startTime:String})

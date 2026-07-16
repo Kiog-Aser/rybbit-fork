@@ -15,6 +15,7 @@ import {
 type BotTimeSeriesPoint = {
   time: string;
   bot_requests: number;
+  crawler?: string;
 };
 
 export interface BotTimeSeriesRequest {
@@ -25,11 +26,13 @@ export interface BotTimeSeriesRequest {
     bucket: TimeBucket;
     layer?: BotLayerKey;
     category?: string;
+    /** When "crawler", return one row per (time, matched_ua_pattern). */
+    groupBy?: string;
   }>;
 }
 
 const getQuery = (params: BotTimeSeriesRequest["Querystring"]) => {
-  const { bucket = "hour", time_zone } = params;
+  const { bucket = "hour", time_zone, groupBy } = params;
   const timeStatement = getTimeStatement(params);
   const filterStatement = getBotFilterStatement(params.filters);
   const layerStatement = getBotLayerStatement(params.layer);
@@ -38,8 +41,30 @@ const getQuery = (params: BotTimeSeriesRequest["Querystring"]) => {
     Boolean(params.start_date && params.end_date) ||
     Boolean(params.start_datetime && params.end_datetime) ||
     (params.past_minutes_start !== undefined && params.past_minutes_end !== undefined);
-  const fillClause = hasBoundedTime ? getBotTimeStatementFill(params, bucket) : "";
+  // WITH FILL only works for single-series aggregates
+  const fillClause =
+    groupBy !== "crawler" && hasBoundedTime ? getBotTimeStatementFill(params, bucket) : "";
   const timezone = SqlString.escape(time_zone || "UTC");
+  const byCrawler = groupBy === "crawler";
+
+  if (byCrawler) {
+    return `
+      SELECT
+        toDateTime(${TimeBucketToFn[bucket]}(toTimeZone(timestamp, ${timezone}))) AS time,
+        matched_ua_pattern AS crawler,
+        count() AS bot_requests
+      FROM bot_events
+      WHERE site_id = {siteId:Int32}
+        AND detected_ua_pattern
+        AND matched_ua_pattern != ''
+        ${filterStatement}
+        ${layerStatement}
+        ${categoryStatement}
+        ${timeStatement}
+      GROUP BY time, crawler
+      ORDER BY time, bot_requests DESC
+    `;
+  }
 
   return `
     SELECT

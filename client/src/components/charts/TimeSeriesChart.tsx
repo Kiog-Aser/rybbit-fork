@@ -467,21 +467,19 @@ export function TimeSeriesChart<
     const point = primaryData[idx];
     if (!point) return;
 
+    // Include every series at the nearest bucket so multi-provider charts
+    // always show a full per-provider breakdown on hover (DataFast-style).
     const points = hoverSeries.flatMap(item => {
       if (!item.data.length) return [];
       const seriesPoint = item.data[bisectCurrent(item.data, point.x)];
-      if (!seriesPoint || seriesPoint.x.getTime() !== point.x.getTime()) {
-        return [];
-      }
-      return seriesPoint
-        ? [
-            {
-              id: item.id,
-              color: item.color,
-              point: seriesPoint,
-            },
-          ]
-        : [];
+      if (!seriesPoint) return [];
+      return [
+        {
+          id: item.id,
+          color: item.color,
+          point: seriesPoint,
+        },
+      ];
     });
 
     let previousPoint: PreviousPoint | undefined;

@@ -555,6 +555,8 @@ async function initializeLiteDashboardMVs() {
     `,
   });
 
+  // Prefer identified_user_id when present so multi-device / multi-storage
+  // fingerprints that share identify() count as one visitor.
   await clickhouse.exec({
     query: `
       CREATE MATERIALIZED VIEW IF NOT EXISTS session_hourly_mv
@@ -566,14 +568,17 @@ async function initializeLiteDashboardMVs() {
         toStartOfHour(session_start) AS session_hour,
         count() AS sessions,
         sum(session_pageviews) AS pageviews,
-        uniqState(user_id) AS users,
+        uniqState(person_id) AS users,
         sum(toUInt64(session_end - session_start)) AS total_session_duration_seconds,
         countIf(session_pageviews = 1) AS bounced_sessions
       FROM (
         SELECT
           site_id,
           session_id,
-          any(user_id) AS user_id,
+          coalesce(
+            nullIf(argMaxIf(identified_user_id, timestamp, identified_user_id != ''), ''),
+            any(user_id)
+          ) AS person_id,
           countIf(type = 'pageview') AS session_pageviews,
           min(timestamp) AS session_start,
           max(timestamp) AS session_end
@@ -583,6 +588,54 @@ async function initializeLiteDashboardMVs() {
       GROUP BY site_id, session_hour
     `,
   });
+
+  // Recreate the refreshable MV if an older definition still uniques raw user_id
+  // only (would double-count people who identify across browsers/devices).
+  try {
+    const viewCheck = await clickhouse.query({
+      query: `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = 'session_hourly_mv'`,
+      format: "JSONEachRow",
+    });
+    const rows = (await viewCheck.json()) as Array<{ create_table_query?: string }>;
+    const ddl = rows[0]?.create_table_query || "";
+    if (ddl && !ddl.includes("person_id") && !ddl.includes("identified_user_id")) {
+      await clickhouse.exec({ query: `DROP TABLE IF EXISTS session_hourly_mv` });
+      await clickhouse.exec({
+        query: `
+          CREATE MATERIALIZED VIEW session_hourly_mv
+          REFRESH EVERY 5 MINUTE
+          TO session_hourly_mv_target
+          AS
+          SELECT
+            site_id,
+            toStartOfHour(session_start) AS session_hour,
+            count() AS sessions,
+            sum(session_pageviews) AS pageviews,
+            uniqState(person_id) AS users,
+            sum(toUInt64(session_end - session_start)) AS total_session_duration_seconds,
+            countIf(session_pageviews = 1) AS bounced_sessions
+          FROM (
+            SELECT
+              site_id,
+              session_id,
+              coalesce(
+                nullIf(argMaxIf(identified_user_id, timestamp, identified_user_id != ''), ''),
+                any(user_id)
+              ) AS person_id,
+              countIf(type = 'pageview') AS session_pageviews,
+              min(timestamp) AS session_start,
+              max(timestamp) AS session_end
+            FROM events
+            GROUP BY site_id, session_id
+          ) AS s
+          GROUP BY site_id, session_hour
+        `,
+      });
+      logger.info("Recreated session_hourly_mv to count identified people once");
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not verify/recreate session_hourly_mv person_id definition");
+  }
 
   // Rybbit export instant imports write here instead of the refreshable MV
   // targets (which are fully replaced every 5 minutes from live events).

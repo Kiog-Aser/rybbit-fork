@@ -9,9 +9,10 @@ import { useExtracted } from "next-intl";
 import { useMemo, useState } from "react";
 import { useGetSessions } from "../../../../../api/analytics/hooks/useGetUserSessions";
 import { GetSessionsResponse } from "../../../../../api/analytics/endpoints";
-import { Avatar, generateName } from "../../../../../components/Avatar";
+import { Avatar } from "../../../../../components/Avatar";
 import { Channel } from "../../../../../components/Channel";
 import { EventIcon, PageviewIcon } from "../../../../../components/EventIcons";
+import { IdentifiedBadge } from "../../../../../components/IdentifiedBadge";
 import { SessionCard as FullSessionCard } from "../../../../../components/Sessions/SessionCard";
 import {
   BrowserTooltipIcon,
@@ -28,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../../../componen
 import { useDateTimeFormat } from "../../../../../hooks/useDateTimeFormat";
 import { formatShortDuration } from "../../../../../lib/dateTimeUtils";
 import { getTimezone } from "../../../../../lib/store";
-import { cn, formatter, truncateString } from "../../../../../lib/utils";
+import { cn, formatter, getUserDisplayName, truncateString } from "../../../../../lib/utils";
 
 const VISIBLE_ROWS = 4;
 const ROW_HEIGHT_PX = 88;
@@ -41,7 +42,9 @@ function SessionPreviewCard({ session, onClick }: { session: GetSessionsResponse
   const end = DateTime.fromSQL(session.session_end, { zone: "utc" });
   const totalSeconds = Math.floor(end.diff(start).milliseconds / 1000);
   const duration = formatShortDuration(totalSeconds);
-  const name = generateName(session.user_id);
+  // Prefer identified name/email over random animal names from device fingerprint.
+  const displayName = getUserDisplayName(session);
+  const avatarId = session.identified_user_id || session.user_id;
 
   return (
     <button
@@ -56,8 +59,9 @@ function SessionPreviewCard({ session, onClick }: { session: GetSessionsResponse
     >
       <div className="flex justify-between border-b border-neutral-100 dark:border-neutral-800 pb-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Avatar id={session.user_id} size={16} />
-          <span className="text-xs font-medium truncate">{name}</span>
+          <Avatar id={avatarId} size={16} />
+          <span className="text-xs font-medium truncate max-w-[140px]">{displayName}</span>
+          {!!session.identified_user_id && <IdentifiedBadge traits={session.traits} />}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
           <span>

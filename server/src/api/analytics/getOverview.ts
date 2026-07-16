@@ -32,7 +32,11 @@ const getQuery = (params: FilterParams, siteId: number) => {
     FilteredSessionsWithStats AS (
         SELECT
             session_id,
-            anyLast(user_id) AS user_id,
+            -- Collapse multi-device fingerprints that share identify() into one person
+            coalesce(
+              nullIf(argMaxIf(identified_user_id, timestamp, identified_user_id != ''), ''),
+              anyLast(user_id)
+            ) AS person_id,
             MIN(timestamp) AS start_time,
             MAX(timestamp) AS end_time,
             countIf(type = 'pageview') AS filtered_pageviews
@@ -49,7 +53,7 @@ const getQuery = (params: FilterParams, siteId: number) => {
         sumIf(1, asp.total_pageviews_in_session = 1) / COUNT() * 100 AS bounce_rate,
         AVG(f.end_time - f.start_time) AS session_duration,
         SUM(f.filtered_pageviews) AS pageviews,
-        COUNT(DISTINCT f.user_id) AS users
+        COUNT(DISTINCT f.person_id) AS users
     FROM FilteredSessionsWithStats f
     LEFT JOIN AllSessionPageviews asp ON f.session_id = asp.session_id`;
 };

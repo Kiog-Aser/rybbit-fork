@@ -70,14 +70,15 @@ export function UsersLite() {
                 const referrerDomain = extractDomain(user.referrer);
                 const channelLabel = referrerDomain ? getDisplayName(referrerDomain) : user.channel || t("Direct");
 
+                const personId = user.identified_user_id || user.user_id;
                 return (
                   <Link
-                    key={user.user_id}
-                    href={`/${site}/user/${encodeURIComponent(user.user_id)}`}
+                    key={personId}
+                    href={`/${site}/user/${encodeURIComponent(personId)}`}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-850 transition-colors"
                     style={{ minHeight: ROW_HEIGHT_PX }}
                   >
-                    <Avatar id={user.user_id} size={36} />
+                    <Avatar id={personId} size={36} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{displayName}</div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">

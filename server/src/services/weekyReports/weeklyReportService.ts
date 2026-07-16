@@ -58,8 +58,8 @@ class WeeklyReportService {
           CROSS JOIN
           (
               SELECT
-                  COUNT(*)                   AS pageviews,
-                  COUNT(DISTINCT user_id)    AS users
+                  COUNT(*) AS pageviews,
+                  COUNT(DISTINCT coalesce(nullIf(identified_user_id, ''), user_id)) AS users
               FROM events
               WHERE
                   site_id = {siteId:Int32}

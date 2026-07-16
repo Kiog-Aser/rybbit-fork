@@ -109,7 +109,9 @@ export async function getSessions(req: FastifyRequest<GetSessionsRequest>, res: 
       SELECT
           session_id,
           argMax(user_id, timestamp) AS user_id,
-          argMax(identified_user_id, timestamp) AS identified_user_id,
+          -- Prefer a non-empty identified id (last event may still be anonymous if
+          -- identify landed mid-session and a later anonymous event overwrote argMax).
+          nullIf(argMaxIf(identified_user_id, timestamp, identified_user_id != ''), '') AS identified_user_id,
           argMax(country, timestamp) AS country,
           argMax(region, timestamp) AS region,
           argMax(city, timestamp) AS city,

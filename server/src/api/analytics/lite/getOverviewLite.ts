@@ -48,13 +48,13 @@ export async function getOverviewLite(
         SELECT
           count() AS sessions,
           sum(session_pageviews) AS pageviews,
-          uniqExact(user_id) AS users,
+          uniqExact(person_id) AS users,
           countIf(session_pageviews = 1) AS bounced_sessions,
           sum(toUInt64(session_end - session_start)) AS total_session_duration_seconds
         FROM (
           SELECT
             session_id,
-            any(user_id) AS user_id,
+            any(user_id) AS person_id,
             sum(pageviews) AS session_pageviews,
             min(start_time) AS session_start,
             max(end_time) AS session_end

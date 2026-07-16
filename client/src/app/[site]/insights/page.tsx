@@ -18,13 +18,13 @@ import { useSetPageTitle } from "../../../hooks/useSetPageTitle";
 import { REVENUE_ATTRIBUTION } from "../../../lib/const";
 import { getMainDashboardPath } from "../../../lib/siteRoute";
 import { getTimezone, useStore } from "../../../lib/store";
-import { getCountryName } from "../../../lib/utils";
+import { cn, getCountryName } from "../../../lib/utils";
 import { CountryFlag } from "../components/shared/icons/CountryFlag";
 import { Browser } from "../components/shared/icons/Browser";
 import { DeviceIcon } from "../components/shared/icons/Device";
 import { OperatingSystem } from "../components/shared/icons/OperatingSystem";
 
-/** Insights is always a rolling last-30-days report — independent of dashboard date filter. */
+/** Fixed rolling last-30-days window — independent of dashboard date filter. */
 function useLast30Days(): Time {
   return useMemo(() => {
     const tz = getTimezone();
@@ -67,32 +67,66 @@ function formatPeriod(time: Time): string {
   return "Last 30 days";
 }
 
-function StatPill({
+/** Flat panel — design system radii (~4.8px), no shadow, surface token. */
+function Panel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 p-3 min-h-0 overflow-hidden",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PanelLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-medium text-muted-foreground mb-1.5 tracking-tight">{children}</p>
+  );
+}
+
+function Metric({
   label,
   value,
   accent,
   loading,
+  large,
 }: {
   label: string;
   value: React.ReactNode;
   accent?: boolean;
   loading?: boolean;
+  large?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 backdrop-blur-sm">
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">{label}</p>
+    <Panel className="flex flex-col justify-center">
+      <PanelLabel>{label}</PanelLabel>
       {loading ? (
-        <Skeleton className="mt-2 h-8 w-24 bg-white/10" />
+        <Skeleton className="h-7 w-16" />
       ) : (
-        <div className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight ${accent ? "text-emerald-400" : "text-white"}`}>
+        <div
+          className={cn(
+            "font-semibold tabular-nums tracking-tight",
+            large ? "text-2xl md:text-3xl" : "text-xl md:text-2xl",
+            accent ? "text-emerald-500 dark:text-emerald-400" : "text-foreground"
+          )}
+        >
           {value}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
 
-function RankBlock({
+function RankList({
   title,
   loading,
   rows,
@@ -104,36 +138,32 @@ function RankBlock({
   rows: Array<{ key: string; label: React.ReactNode; primary: string; secondary?: string }>;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 h-full">
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 mb-4">{title}</p>
+    <Panel className="flex flex-col">
+      <PanelLabel>{title}</PanelLabel>
       {loading ? (
-        <div className="space-y-2.5">
+        <div className="space-y-1.5 flex-1">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-7 w-full bg-white/10" />
+            <Skeleton key={i} className="h-5 w-full" />
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-neutral-500 py-8 text-center">{empty}</p>
+        <p className="text-xs text-muted-foreground py-4 text-center flex-1">{empty}</p>
       ) : (
-        <div className="space-y-1">
-          {rows.map((row, i) => (
-            <div
-              key={row.key}
-              className="flex items-center justify-between gap-3 text-sm py-2 border-b border-white/[0.04] last:border-0"
-            >
-              <div className="min-w-0 flex-1 flex items-center gap-2.5">
-                <span className="text-[11px] tabular-nums text-neutral-600 w-4 shrink-0">{i + 1}</span>
-                <div className="min-w-0 truncate text-neutral-200">{row.label}</div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0 tabular-nums">
-                {row.secondary && <span className="text-xs text-neutral-500">{row.secondary}</span>}
-                <span className="font-medium text-emerald-400/90 min-w-[3.5rem] text-right">{row.primary}</span>
+        <div className="flex flex-col gap-0.5 min-h-0 overflow-hidden">
+          {rows.map(row => (
+            <div key={row.key} className="flex items-center justify-between gap-2 text-xs py-0.5 min-w-0">
+              <div className="min-w-0 flex-1 truncate text-foreground/90">{row.label}</div>
+              <div className="flex items-center gap-2 shrink-0 tabular-nums">
+                {row.secondary && <span className="text-muted-foreground">{row.secondary}</span>}
+                <span className="font-medium text-emerald-500 dark:text-emerald-400 min-w-[2.5rem] text-right">
+                  {row.primary}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -144,10 +174,12 @@ export default function InsightsPage() {
   const siteId = useStore(s => s.site);
   const { site } = useCurrentSite();
 
+  // Same lite overview path as the main dashboard for consistent visitor counts.
   const { data: overview, isLoading: overviewLoading } = useGetOverview({
     site: siteId,
     overrideTime: last30,
     useFilters: false,
+    lite: true,
   });
   const { data: revenue, isLoading: revenueLoading } = useRevenueOverview(last30);
   const { data: revenueCountries, isLoading: revCountriesLoading } = useRevenueByDimension("country", last30);
@@ -212,11 +244,19 @@ export default function InsightsPage() {
   const topBrowser = browsers?.data?.[0];
   const topOs = systems?.data?.[0];
 
+  // Insight cards: % of revenue from top segment
+  const topDeviceRev = useMemo(() => {
+    if (!devices?.data?.length || !REVENUE_ATTRIBUTION) return null;
+    // device revenue not always available; use session share as proxy when needed
+    const d = devices.data[0];
+    return { name: d.value, pct: d.percentage };
+  }, [devices?.data]);
+
   const countryRows = useMemo(() => {
-    return (revenueCountries ?? []).slice(0, 6).map(row => ({
+    return (revenueCountries ?? []).slice(0, 5).map(row => ({
       key: row.value,
       label: (
-        <span className="inline-flex items-center gap-2 min-w-0">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
           <CountryFlag country={row.value} />
           <span className="truncate">{getCountryName(row.value) || row.value}</span>
         </span>
@@ -227,20 +267,19 @@ export default function InsightsPage() {
   }, [revenueCountries]);
 
   const channelRows = useMemo(() => {
-    return (revenueChannels ?? []).slice(0, 6).map(row => ({
+    return (revenueChannels ?? []).slice(0, 5).map(row => ({
       key: row.value,
       label: <span className="capitalize truncate">{row.value}</span>,
       primary: formatMoney(row.revenue_cents),
-      secondary: `${row.payment_count}`,
     }));
   }, [revenueChannels]);
 
   const referrerRows = useMemo(() => {
-    return (revenueReferrers ?? []).slice(0, 6).map(row => ({
+    return (revenueReferrers ?? []).slice(0, 5).map(row => ({
       key: row.value,
       label: (
-        <span className="inline-flex items-center gap-2 min-w-0">
-          {row.value !== "direct" && <Favicon domain={row.value} className="w-3.5 h-3.5" />}
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          {row.value !== "direct" && <Favicon domain={row.value} className="w-3 h-3" />}
           <span className="truncate">{row.value === "direct" ? t("Direct") : row.value}</span>
         </span>
       ),
@@ -249,56 +288,50 @@ export default function InsightsPage() {
   }, [revenueReferrers, t]);
 
   const pageRows = useMemo(() => {
-    return (pages?.data ?? []).slice(0, 6).map(row => ({
+    return (pages?.data ?? []).slice(0, 5).map(row => ({
       key: row.value,
-      label: <span className="truncate font-mono text-xs text-neutral-300">{row.value || "/"}</span>,
+      label: <span className="truncate font-mono text-[11px]">{row.value || "/"}</span>,
       primary: row.count.toLocaleString(),
       secondary: `${round(row.percentage)}%`,
     }));
   }, [pages?.data]);
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-neutral-950 text-white">
-      {/* Ambient glow */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-0 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-emerald-500/[0.07] blur-[100px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,transparent_20%,rgb(10,10,10)_75%)]" />
-      </div>
-
-      {/* Minimal top bar */}
-      <div className="relative z-10 flex items-center justify-between px-4 py-4 md:px-8">
+    <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
+      {/* Top chrome */}
+      <div className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-neutral-200 dark:border-neutral-800">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm text-neutral-300 transition hover:bg-white/[0.08] hover:text-white"
+          className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-neutral-100 dark:hover:bg-neutral-850 transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
+          <ArrowLeft className="h-3 w-3" />
           {t("Dashboard")}
         </Link>
-        <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-neutral-400">
+        <span className="rounded-md border border-neutral-200 dark:border-neutral-800 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {t("Last 30 days")}
         </span>
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-[880px] space-y-8 px-4 pb-20 pt-6 md:px-6 md:pt-10">
-        {/* Hero — centered report identity */}
-        <section className="flex flex-col items-center text-center">
-          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[22px] border border-white/[0.1] bg-gradient-to-b from-white/[0.08] to-white/[0.02] shadow-2xl shadow-black/50">
+      {/* Bento — one viewport, no page scroll */}
+      <div className="flex-1 min-h-0 p-2 md:p-3 grid grid-cols-12 grid-rows-[auto_1fr_1fr_auto] gap-2">
+        {/* Hero identity */}
+        <Panel className="col-span-12 md:col-span-4 row-span-1 md:row-span-2 flex flex-col items-center justify-center text-center gap-2 py-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-850">
             {domain ? (
-              <Favicon domain={domain} className="h-11 w-11 rounded-xl" />
+              <Favicon domain={domain} className="h-8 w-8 rounded-sm" />
             ) : (
-              <span className="text-3xl font-semibold text-emerald-400">R</span>
+              <span className="text-xl font-semibold text-emerald-500">R</span>
             )}
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{siteName}</h1>
-          <p className="mt-2 text-sm text-neutral-400">{period}</p>
-          <p className="mt-0.5 text-[11px] text-neutral-600">{timezone}</p>
-
-          <div className="mt-8 grid w-full max-w-md grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-5">
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
-                {t("Avg. daily visitors")}
-              </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
+          <div>
+            <h1 className="text-lg md:text-xl font-semibold tracking-tight">{siteName}</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">{period}</p>
+            <p className="text-[10px] text-muted-foreground/70">{timezone}</p>
+          </div>
+          <div className="mt-1 grid w-full max-w-xs grid-cols-2 gap-2">
+            <div className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-background px-2 py-2">
+              <p className="text-[10px] text-muted-foreground">{t("Avg. daily visitors")}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums">
                 {overviewLoading ? (
                   "—"
                 ) : (
@@ -309,147 +342,158 @@ export default function InsightsPage() {
                 )}
               </p>
             </div>
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-5 py-5">
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
-                {t("Avg. daily revenue")}
-              </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-emerald-400">
+            <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-2 py-2">
+              <p className="text-[10px] text-muted-foreground">{t("Avg. daily revenue")}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
                 {!REVENUE_ATTRIBUTION || revenueLoading ? "—" : formatMoneyPrecise(avgDailyRevenue)}
               </p>
             </div>
           </div>
-        </section>
+        </Panel>
 
-        {/* KPI grid */}
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatPill
+        {/* KPI strip */}
+        <div className="col-span-12 md:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <Metric
             label={t("Visitors")}
             loading={overviewLoading}
             value={<NumberFlow value={visitors} format={{ notation: "compact" }} />}
           />
-          <StatPill
+          <Metric
             label={t("Sessions")}
             loading={overviewLoading}
             value={<NumberFlow value={sessions} format={{ notation: "compact" }} />}
           />
-          <StatPill
+          <Metric
             label={t("Revenue")}
             loading={revenueLoading}
             accent
             value={REVENUE_ATTRIBUTION ? formatMoney(revenueCents) : "—"}
           />
-          <StatPill
+          <Metric
             label={t("Rev / visitor")}
             loading={revenueLoading || overviewLoading}
             accent
             value={REVENUE_ATTRIBUTION ? formatMoneyPrecise(revPerVisitor) : "—"}
           />
-          <StatPill
+        </div>
+
+        <div className="col-span-12 md:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <Metric
             label={t("Conversion rate")}
             loading={revenueLoading || overviewLoading}
             value={REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
           />
-          <StatPill
+          <Metric
             label={t("Paying visitors")}
             loading={revenueLoading}
             value={REVENUE_ATTRIBUTION ? payingUsers.toLocaleString() : "—"}
           />
-          <StatPill label={t("Bounce rate")} loading={overviewLoading} value={`${Math.round(bounce)}%`} />
-          <StatPill
+          <Metric label={t("Bounce rate")} loading={overviewLoading} value={`${Math.round(bounce)}%`} />
+          <Metric
             label={t("Avg. session")}
             loading={overviewLoading}
             value={durationSec ? `${Math.round(durationSec / 60)}m ${Math.round(durationSec % 60)}s` : "—"}
           />
-        </section>
+        </div>
 
-        {/* Audience composition */}
-        <section className="grid gap-3 md:grid-cols-3">
-          <AudienceCard
-            title={t("Top device")}
-            icon={topDevice ? <DeviceIcon deviceType={topDevice.value} size={28} /> : null}
-            name={topDevice?.value || t("Unknown")}
-            pct={topDevice ? round(topDevice.percentage) : null}
-            suffix={t("of sessions")}
-          />
-          <AudienceCard
-            title={t("Top browser")}
-            icon={topBrowser ? <Browser browser={topBrowser.value} size={28} /> : null}
-            name={topBrowser?.value || t("Unknown")}
-            pct={topBrowser ? round(topBrowser.percentage) : null}
-            suffix={t("of sessions")}
-          />
-          <AudienceCard
-            title={t("Top OS")}
-            icon={topOs ? <OperatingSystem os={topOs.value} size={28} /> : null}
-            name={topOs?.value || t("Unknown")}
-            pct={topOs ? round(topOs.percentage) : null}
-            suffix={t("of sessions")}
-          />
-        </section>
+        {/* Audience */}
+        <Panel className="col-span-4 md:col-span-2">
+          <PanelLabel>{t("Top device")}</PanelLabel>
+          {topDevice ? (
+            <div className="flex items-center gap-2 mt-1">
+              <DeviceIcon deviceType={topDevice.value} size={22} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{topDevice.value}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {round(topDevice.percentage)}% {t("of sessions")}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">—</p>
+          )}
+        </Panel>
+        <Panel className="col-span-4 md:col-span-2">
+          <PanelLabel>{t("Top browser")}</PanelLabel>
+          {topBrowser ? (
+            <div className="flex items-center gap-2 mt-1">
+              <Browser browser={topBrowser.value} size={22} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{topBrowser.value}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {round(topBrowser.percentage)}% {t("of sessions")}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">—</p>
+          )}
+        </Panel>
+        <Panel className="col-span-4 md:col-span-2">
+          <PanelLabel>{t("Top OS")}</PanelLabel>
+          {topOs ? (
+            <div className="flex items-center gap-2 mt-1">
+              <OperatingSystem os={topOs.value} size={22} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{topOs.value}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {round(topOs.percentage)}% {t("of sessions")}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">—</p>
+          )}
+        </Panel>
+        <Panel className="col-span-12 md:col-span-2 flex flex-col justify-center">
+          <PanelLabel>{t("Conversion rate")}</PanelLabel>
+          <p className="text-2xl font-semibold tabular-nums text-emerald-500 dark:text-emerald-400">
+            {REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
+          </p>
+        </Panel>
 
-        {/* Breakdowns */}
-        <section className="grid gap-3 lg:grid-cols-2">
-          <RankBlock
+        {/* Rankings */}
+        <div className="col-span-12 md:col-span-3 min-h-0">
+          <RankList
             title={t("Top revenue by country")}
             loading={revCountriesLoading}
             empty={t("No revenue in this period")}
             rows={countryRows}
           />
-          <RankBlock
+        </div>
+        <div className="col-span-12 md:col-span-3 min-h-0">
+          <RankList
             title={t("Top revenue by channel")}
             loading={revChannelsLoading}
             empty={t("No revenue in this period")}
             rows={channelRows}
           />
-          <RankBlock
+        </div>
+        <div className="col-span-12 md:col-span-3 min-h-0">
+          <RankList
             title={t("Top revenue by referrer")}
             loading={revReferrersLoading}
             empty={t("No revenue in this period")}
             rows={referrerRows}
           />
-          <RankBlock title={t("Top pages")} loading={false} empty={t("No pageviews yet")} rows={pageRows} />
-        </section>
+        </div>
+        <div className="col-span-12 md:col-span-3 min-h-0">
+          <RankList title={t("Top pages")} loading={false} empty={t("No pageviews yet")} rows={pageRows} />
+        </div>
 
         {REVENUE_ATTRIBUTION && paymentCount > 0 && (
-          <p className="text-center text-xs text-neutral-600">
+          <p className="col-span-12 text-center text-[10px] text-muted-foreground pb-1">
             {paymentCount.toLocaleString()} {t("successful payments")} · {payingUsers.toLocaleString()}{" "}
             {t("paying visitors")} · {t("conversion")} {conversionRate.toFixed(2)}%
+            {topDeviceRev && (
+              <>
+                {" "}
+                · {round(topDeviceRev.pct)}% {t("sessions on")} {topDeviceRev.name}
+              </>
+            )}
           </p>
         )}
       </div>
-    </div>
-  );
-}
-
-function AudienceCard({
-  title,
-  icon,
-  name,
-  pct,
-  suffix,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  name: string;
-  pct: number | null;
-  suffix: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 mb-3">{title}</p>
-      {pct != null ? (
-        <div className="flex items-center gap-3">
-          {icon}
-          <div>
-            <p className="font-semibold text-neutral-100">{name}</p>
-            <p className="text-xs text-neutral-500">
-              {pct}% {suffix}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-neutral-500">—</p>
-      )}
     </div>
   );
 }

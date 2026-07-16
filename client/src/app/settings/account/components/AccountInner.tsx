@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../../components
 import { Input } from "../../../../components/ui/input";
 import { Switch } from "../../../../components/ui/switch";
 import { validateEmail } from "../../../../lib/auth-utils";
-import { IS_CLOUD } from "../../../../lib/const";
 import { ApiKeyManager } from "./ApiKeyManager";
 import { ChangePassword } from "./ChangePassword";
 import { DeleteAccount } from "./DeleteAccount";
@@ -114,6 +113,23 @@ export function AccountInner() {
     }
   };
 
+  const [isSendingReport, setIsSendingReport] = useState(false);
+  const handleSendWeeklyReportNow = async () => {
+    setIsSendingReport(true);
+    try {
+      const { authedFetch } = await import("../../../../api/utils");
+      await authedFetch("/admin/weekly-reports/send", undefined, { method: "POST" });
+      toast.success(t("Weekly report is being sent to your email"));
+    } catch (error) {
+      console.error("Error sending weekly report:", error);
+      toast.error(
+        error instanceof Error ? error.message : t("Failed to send weekly report (admin access required)")
+      );
+    } finally {
+      setIsSendingReport(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Card className="p-2">
@@ -155,19 +171,31 @@ export function AccountInner() {
               </Button>
             </div>
           </div>
-          {(session.data?.user as any)?.sendAutoEmailReports !== undefined && IS_CLOUD && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">{t("Send Weekly Email Reports")}</h4>
-                <p className="text-xs text-neutral-500">{t("Enable or disable automatic email reports for your account.")}</p>
+          {(session.data?.user as any)?.sendAutoEmailReports !== undefined && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium">{t("Send Weekly Email Reports")}</h4>
+                  <p className="text-xs text-neutral-500">
+                    {t("Every Monday at 09:00 UTC. From reports@mails.milh.tech to your account email.")}
+                  </p>
+                </div>
+                <div className="flex space-x-2 shrink-0">
+                  <Switch
+                    checked={(session.data?.user as any).sendAutoEmailReports !== false}
+                    onCheckedChange={handleEmailReportsToggle}
+                    disabled={updateAccountSettings.isPending}
+                  />
+                </div>
               </div>
-              <div className="flex space-x-2">
-                <Switch
-                  checked={(session.data?.user as any).sendAutoEmailReports}
-                  onCheckedChange={handleEmailReportsToggle}
-                  disabled={updateAccountSettings.isPending}
-                />
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendWeeklyReportNow}
+                disabled={isSendingReport}
+              >
+                {isSendingReport ? t("Sending...") : t("Send report now")}
+              </Button>
             </div>
           )}
           <div className="space-y-2">

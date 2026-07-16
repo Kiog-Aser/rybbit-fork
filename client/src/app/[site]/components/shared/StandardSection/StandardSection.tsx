@@ -81,13 +81,25 @@ export function StandardSection({
   const itemsForDisplay = useMemo(() => data?.pages.flatMap(page => page.data), [data]);
   const { byValue: revenueByValue } = useRevenueByDimension(filterParameter);
 
+  const maxCount = useMemo(
+    () => Math.max(1, ...(itemsForDisplay?.map(item => item.count) ?? [1])),
+    [itemsForDisplay]
+  );
+  const maxRevenueCents = useMemo(() => {
+    if (!itemsForDisplay?.length) return 0;
+    let max = 0;
+    for (const item of itemsForDisplay) {
+      const cents = revenueByValue.get(getValue(item)) ?? 0;
+      if (cents > max) max = cents;
+    }
+    return max;
+  }, [itemsForDisplay, revenueByValue, getValue]);
+
   useEffect(() => {
     if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage && !isLoading) {
       fetchNextPage();
     }
   }, [entry?.isIntersecting, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading]);
-
-  const ratio = itemsForDisplay?.[0]?.percentage ? 100 / itemsForDisplay[0].percentage : 1;
 
   return (
     <>
@@ -117,9 +129,20 @@ export function StandardSection({
             </Tooltip>
           )}
         </div>
-        <div className="flex gap-3">
-          {REVENUE_ATTRIBUTION && <span className="text-accent-400/80">{t("Revenue")}</span>}
-          <span>{countLabel || t("Sessions")}</span>
+        <div className="flex gap-3 items-center">
+          {REVENUE_ATTRIBUTION && maxRevenueCents > 0 && (
+            <>
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-[1px] bg-dataviz/80" />
+                {countLabel || t("Visitors")}
+              </span>
+              <span className="inline-flex items-center gap-1 text-emerald-500 dark:text-emerald-400/90">
+                <span className="inline-block w-2 h-2 rounded-[1px] bg-emerald-500/80" />
+                {t("Revenue")}
+              </span>
+            </>
+          )}
+          {!(REVENUE_ATTRIBUTION && maxRevenueCents > 0) && <span>{countLabel || t("Sessions")}</span>}
         </div>
       </div>
       <ScrollArea className="h-[314px]">
@@ -137,7 +160,8 @@ export function StandardSection({
                     <Row
                       key={getKey(e)}
                       e={e}
-                      ratio={ratio}
+                      maxCount={maxCount}
+                      maxRevenueCents={maxRevenueCents}
                       getKey={getKey}
                       getLabel={getLabel}
                       getValue={getValue}

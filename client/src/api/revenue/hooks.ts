@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DateTime } from "luxon";
+import { Time } from "../../components/DateSelector/types";
 import { CommonApiParams } from "../analytics/endpoints/types";
 import { buildApiParams } from "../utils";
 import {
@@ -81,12 +82,13 @@ export function useSyncStripeRevenue() {
   });
 }
 
-export function useRevenueOverview() {
+export function useRevenueOverview(overrideTime?: Time) {
   const { site, time } = useStore();
-  const { startTime, endTime } = revenueTimeRange(buildApiParams(time, { filters: undefined }));
+  const timeToUse = overrideTime ?? time;
+  const { startTime, endTime } = revenueTimeRange(buildApiParams(timeToUse, { filters: undefined }));
 
   return useQuery({
-    queryKey: ["revenue-overview", site, time],
+    queryKey: ["revenue-overview", site, timeToUse],
     queryFn: () => fetchRevenueOverview(site!, startTime, endTime),
     enabled: Boolean(site) && REVENUE_ATTRIBUTION,
   });
@@ -116,14 +118,15 @@ const REVENUE_DIMENSIONS = new Set([
 ]);
 
 /** Map of dimension value → revenue cents for the current time range. */
-export function useRevenueByDimension(parameter: string | undefined) {
+export function useRevenueByDimension(parameter: string | undefined, overrideTime?: Time) {
   const { site, time } = useStore();
-  const { startTime, endTime } = revenueTimeRange(buildApiParams(time, { filters: undefined }));
+  const timeToUse = overrideTime ?? time;
+  const { startTime, endTime } = revenueTimeRange(buildApiParams(timeToUse, { filters: undefined }));
   const enabled =
     Boolean(site) && REVENUE_ATTRIBUTION && Boolean(parameter) && REVENUE_DIMENSIONS.has(parameter!);
 
   const query = useQuery({
-    queryKey: ["revenue-by-dimension", site, time, parameter],
+    queryKey: ["revenue-by-dimension", site, timeToUse, parameter],
     queryFn: () => fetchRevenueByDimension(site!, startTime, endTime, parameter!),
     enabled,
     staleTime: 60_000,

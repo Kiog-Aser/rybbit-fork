@@ -15,11 +15,29 @@ function isMainDashboardPath(pathname: string) {
   return getSiteRouteContext(pathname).route === "main";
 }
 
+/** Full-bleed report views (no app chrome) — DataFast-style Insights. */
+function isFullScreenReport(pathname: string) {
+  return pathname.includes("/insights");
+}
+
+function hideFooter(pathname: string) {
+  return (
+    pathname.includes("/map") ||
+    pathname.includes("/realtime") ||
+    pathname.includes("/replay") ||
+    pathname.includes("/globe") ||
+    pathname.includes("/insights") ||
+    pathname.includes("/api-playground") ||
+    pathname.includes("/query")
+  );
+}
+
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { setSiteContext, site, privateKey } = useStore();
   const { embed, hideSidebar } = useEmbedPageOptions();
+  const fullScreen = isFullScreenReport(pathname);
 
   // Sync store state with URL parameters
   useSyncStateWithUrl();
@@ -43,6 +61,11 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
 
   const { width } = useWindowSize();
 
+  // Clean full-screen report (Insights): no sidebars, banners, or footer
+  if (fullScreen) {
+    return <div className="min-h-dvh bg-background">{children}</div>;
+  }
+
   if (width && width < 768) {
     return (
       <div>
@@ -63,15 +86,9 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         )}
         <div className="flex-1 overflow-auto">
           <div className="min-h-full flex flex-col">
-            {/* <div className="px-4 py-2 max-w-[1400px] mx-auto w-full mb-4"> */}
             <Header />
             <div className="flex-1">{children}</div>
-            {!pathname.includes("/map") &&
-              !pathname.includes("/realtime") &&
-              !pathname.includes("/replay") &&
-              !pathname.includes("/globe") &&
-              !pathname.includes("/api-playground") &&
-              !pathname.includes("/query") && <Footer disabled={embed} />}
+            {!hideFooter(pathname) && <Footer disabled={embed} />}
           </div>
         </div>
       </div>

@@ -1,25 +1,42 @@
 "use client";
 
 import NumberFlow from "@number-flow/react";
+import { ArrowLeft } from "lucide-react";
 import { DateTime } from "luxon";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useExtracted } from "next-intl";
 import { useMemo } from "react";
 import { useGetOverview } from "../../../api/analytics/hooks/useGetOverview";
 import { usePaginatedMetric } from "../../../api/analytics/hooks/useGetMetric";
 import { useCurrentSite } from "../../../api/admin/hooks/useSites";
 import { useRevenueByDimension, useRevenueOverview } from "../../../api/revenue/hooks";
+import { Time } from "../../../components/DateSelector/types";
 import { Favicon } from "../../../components/Favicon";
-import { Card, CardContent } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { useSetPageTitle } from "../../../hooks/useSetPageTitle";
 import { REVENUE_ATTRIBUTION } from "../../../lib/const";
+import { getMainDashboardPath } from "../../../lib/siteRoute";
 import { getTimezone, useStore } from "../../../lib/store";
 import { getCountryName } from "../../../lib/utils";
 import { CountryFlag } from "../components/shared/icons/CountryFlag";
 import { Browser } from "../components/shared/icons/Browser";
 import { DeviceIcon } from "../components/shared/icons/Device";
 import { OperatingSystem } from "../components/shared/icons/OperatingSystem";
-import { SubHeader } from "../components/SubHeader/SubHeader";
+
+/** Insights is always a rolling last-30-days report — independent of dashboard date filter. */
+function useLast30Days(): Time {
+  return useMemo(() => {
+    const tz = getTimezone();
+    const now = DateTime.now().setZone(tz);
+    return {
+      mode: "range" as const,
+      startDate: now.minus({ days: 29 }).toISODate()!,
+      endDate: now.toISODate()!,
+      wellKnown: "last-30-days" as const,
+    };
+  }, []);
+}
 
 function formatMoney(cents: number) {
   return (cents / 100).toLocaleString(undefined, {
@@ -38,45 +55,19 @@ function formatMoneyPrecise(cents: number) {
   });
 }
 
-function periodLabel(
-  time: ReturnType<typeof useStore.getState>["time"],
-  t: (s: string) => string
-): string {
-  if (time.mode === "day") {
-    return DateTime.fromISO(time.day).toFormat("MMM d, yyyy");
-  }
-  if (time.mode === "range" && time.startDate && time.endDate) {
-    return `${DateTime.fromISO(time.startDate).toFormat("MMM d")} – ${DateTime.fromISO(time.endDate).toFormat("MMM d, yyyy")}`;
-  }
-  if (time.mode === "week") return t("This week");
-  if (time.mode === "month") return t("This month");
-  if (time.mode === "year") return t("This year");
-  if (time.mode === "past-minutes") {
-    if (time.pastMinutesStart === 1440) return t("Last 24 hours");
-    if (time.pastMinutesStart === 60) return t("Last hour");
-    return t("Recent");
-  }
-  if (time.mode === "all-time") return t("All time");
-  return t("Selected period");
-}
-
-function dayCount(time: ReturnType<typeof useStore.getState>["time"]): number {
-  if (time.mode === "day") return 1;
-  if (time.mode === "week") return 7;
-  if (time.mode === "month") return 30;
-  if (time.mode === "year") return 365;
+function formatPeriod(time: Time): string {
   if (time.mode === "range" && time.startDate && time.endDate) {
     const start = DateTime.fromISO(time.startDate);
     const end = DateTime.fromISO(time.endDate);
-    return Math.max(1, Math.round(end.diff(start, "days").days) + 1);
+    if (start.year === end.year) {
+      return `${start.toFormat("MMM d")} – ${end.toFormat("MMM d, yyyy")}`;
+    }
+    return `${start.toFormat("MMM d, yyyy")} – ${end.toFormat("MMM d, yyyy")}`;
   }
-  if (time.mode === "past-minutes") {
-    return Math.max(1, Math.round((time.pastMinutesStart ?? 1440) / 1440));
-  }
-  return 30;
+  return "Last 30 days";
 }
 
-function StatCard({
+function StatPill({
   label,
   value,
   accent,
@@ -88,22 +79,20 @@ function StatCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="border-neutral-800/80 bg-neutral-900/40">
-      <CardContent className="p-4">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-        {loading ? (
-          <Skeleton className="mt-2 h-8 w-24" />
-        ) : (
-          <div className={`mt-2 text-2xl font-semibold tabular-nums ${accent ? "text-accent-400" : ""}`}>
-            {value}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 backdrop-blur-sm">
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">{label}</p>
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-24 bg-white/10" />
+      ) : (
+        <div className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight ${accent ? "text-emerald-400" : "text-white"}`}>
+          {value}
+        </div>
+      )}
+    </div>
   );
 }
 
-function RankList({
+function RankBlock({
   title,
   loading,
   rows,
@@ -115,54 +104,91 @@ function RankList({
   rows: Array<{ key: string; label: React.ReactNode; primary: string; secondary?: string }>;
 }) {
   return (
-    <Card className="border-neutral-800/80 bg-neutral-900/40 h-full">
-      <CardContent className="p-4">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">{title}</p>
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-7 w-full" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">{empty}</p>
-        ) : (
-          <div className="space-y-1.5">
-            {rows.map(row => (
-              <div key={row.key} className="flex items-center justify-between gap-3 text-sm py-1">
-                <div className="min-w-0 flex-1 truncate">{row.label}</div>
-                <div className="flex items-center gap-3 shrink-0 tabular-nums">
-                  {row.secondary && (
-                    <span className="text-xs text-muted-foreground">{row.secondary}</span>
-                  )}
-                  <span className="font-medium text-accent-400 min-w-[3.5rem] text-right">{row.primary}</span>
-                </div>
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 h-full">
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 mb-4">{title}</p>
+      {loading ? (
+        <div className="space-y-2.5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-full bg-white/10" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-neutral-500 py-8 text-center">{empty}</p>
+      ) : (
+        <div className="space-y-1">
+          {rows.map((row, i) => (
+            <div
+              key={row.key}
+              className="flex items-center justify-between gap-3 text-sm py-2 border-b border-white/[0.04] last:border-0"
+            >
+              <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                <span className="text-[11px] tabular-nums text-neutral-600 w-4 shrink-0">{i + 1}</span>
+                <div className="min-w-0 truncate text-neutral-200">{row.label}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <div className="flex items-center gap-3 shrink-0 tabular-nums">
+                {row.secondary && <span className="text-xs text-neutral-500">{row.secondary}</span>}
+                <span className="font-medium text-emerald-400/90 min-w-[3.5rem] text-right">{row.primary}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 export default function InsightsPage() {
   const t = useExtracted();
-  const { time } = useStore();
+  const pathname = usePathname();
+  const last30 = useLast30Days();
+  const siteId = useStore(s => s.site);
   const { site } = useCurrentSite();
-  const { data: overview, isLoading: overviewLoading } = useGetOverview({});
-  const { data: revenue, isLoading: revenueLoading } = useRevenueOverview();
-  const { data: revenueCountries, isLoading: revCountriesLoading } = useRevenueByDimension("country");
-  const { data: revenueChannels, isLoading: revChannelsLoading } = useRevenueByDimension("channel");
-  const { data: revenueReferrers, isLoading: revReferrersLoading } = useRevenueByDimension("referrer");
-  const { data: devices } = usePaginatedMetric({ parameter: "device_type", limit: 5, page: 1, lite: true });
-  const { data: browsers } = usePaginatedMetric({ parameter: "browser", limit: 5, page: 1, lite: true });
-  const { data: systems } = usePaginatedMetric({ parameter: "operating_system", limit: 5, page: 1, lite: true });
-  const { data: pages } = usePaginatedMetric({ parameter: "pathname", limit: 5, page: 1, lite: true });
+
+  const { data: overview, isLoading: overviewLoading } = useGetOverview({
+    site: siteId,
+    overrideTime: last30,
+    useFilters: false,
+  });
+  const { data: revenue, isLoading: revenueLoading } = useRevenueOverview(last30);
+  const { data: revenueCountries, isLoading: revCountriesLoading } = useRevenueByDimension("country", last30);
+  const { data: revenueChannels, isLoading: revChannelsLoading } = useRevenueByDimension("channel", last30);
+  const { data: revenueReferrers, isLoading: revReferrersLoading } = useRevenueByDimension("referrer", last30);
+  const { data: devices } = usePaginatedMetric({
+    parameter: "device_type",
+    limit: 5,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
+  const { data: browsers } = usePaginatedMetric({
+    parameter: "browser",
+    limit: 5,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
+  const { data: systems } = usePaginatedMetric({
+    parameter: "operating_system",
+    limit: 5,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
+  const { data: pages } = usePaginatedMetric({
+    parameter: "pathname",
+    limit: 5,
+    page: 1,
+    lite: true,
+    useFilters: false,
+    customTime: last30,
+  });
 
   useSetPageTitle(t("Insights"));
 
-  const days = dayCount(time);
+  const days = 30;
   const visitors = overview?.data?.users ?? 0;
   const sessions = overview?.data?.sessions ?? 0;
   const bounce = overview?.data?.bounce_rate ?? 0;
@@ -178,8 +204,9 @@ export default function InsightsPage() {
 
   const domain = site?.domain ?? "";
   const siteName = site?.name || domain || t("Your site");
-  const label = periodLabel(time, t);
+  const period = formatPeriod(last30);
   const timezone = getTimezone();
+  const backHref = getMainDashboardPath(pathname) ?? "/";
 
   const topDevice = devices?.data?.[0];
   const topBrowser = browsers?.data?.[0];
@@ -195,9 +222,9 @@ export default function InsightsPage() {
         </span>
       ),
       primary: formatMoney(row.revenue_cents),
-      secondary: `${row.payment_count} ${t("payments")}`,
+      secondary: `${row.payment_count}`,
     }));
-  }, [revenueCountries, t]);
+  }, [revenueCountries]);
 
   const channelRows = useMemo(() => {
     return (revenueChannels ?? []).slice(0, 6).map(row => ({
@@ -224,211 +251,204 @@ export default function InsightsPage() {
   const pageRows = useMemo(() => {
     return (pages?.data ?? []).slice(0, 6).map(row => ({
       key: row.value,
-      label: <span className="truncate font-mono text-xs">{row.value || "/"}</span>,
+      label: <span className="truncate font-mono text-xs text-neutral-300">{row.value || "/"}</span>,
       primary: row.count.toLocaleString(),
       secondary: `${round(row.percentage)}%`,
     }));
   }, [pages?.data]);
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-5 p-2 md:p-4 pb-16">
-      <SubHeader />
+    <div className="relative min-h-dvh overflow-x-hidden bg-neutral-950 text-white">
+      {/* Ambient glow */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-0 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-emerald-500/[0.07] blur-[100px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,transparent_20%,rgb(10,10,10)_75%)]" />
+      </div>
 
-      {/* Hero identity panel — inspired by DataFast insights, Rybbit styling */}
-      <Card className="overflow-hidden border-neutral-800/80 bg-gradient-to-b from-neutral-900/80 to-neutral-950/90">
-        <CardContent className="relative p-8 md:p-12">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.08),transparent_60%)]" />
-          <div className="relative flex flex-col items-center text-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-neutral-700/80 bg-neutral-900 shadow-lg shadow-black/40">
-              {domain ? (
-                <Favicon domain={domain} className="h-9 w-9 rounded-lg" />
-              ) : (
-                <span className="text-2xl font-semibold text-accent-400">R</span>
-              )}
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{siteName}</h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">{label}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground/70">{timezone}</p>
-            </div>
+      {/* Minimal top bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 py-4 md:px-8">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-sm text-neutral-300 transition hover:bg-white/[0.08] hover:text-white"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          {t("Dashboard")}
+        </Link>
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-neutral-400">
+          {t("Last 30 days")}
+        </span>
+      </div>
 
-            <div className="mt-2 grid w-full max-w-lg grid-cols-2 gap-3">
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {t("Avg. daily visitors")}
-                </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">
-                  {overviewLoading ? (
-                    "—"
-                  ) : (
-                    <NumberFlow
-                      value={Math.round(avgDailyVisitors)}
-                      format={{ notation: avgDailyVisitors >= 1000 ? "compact" : "standard" }}
-                    />
-                  )}
-                </p>
-              </div>
-              <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {t("Avg. daily revenue")}
-                </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-accent-400">
-                  {!REVENUE_ATTRIBUTION || revenueLoading
-                    ? "—"
-                    : formatMoneyPrecise(avgDailyRevenue)}
-                </p>
-              </div>
+      <div className="relative z-10 mx-auto w-full max-w-[880px] space-y-8 px-4 pb-20 pt-6 md:px-6 md:pt-10">
+        {/* Hero — centered report identity */}
+        <section className="flex flex-col items-center text-center">
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[22px] border border-white/[0.1] bg-gradient-to-b from-white/[0.08] to-white/[0.02] shadow-2xl shadow-black/50">
+            {domain ? (
+              <Favicon domain={domain} className="h-11 w-11 rounded-xl" />
+            ) : (
+              <span className="text-3xl font-semibold text-emerald-400">R</span>
+            )}
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{siteName}</h1>
+          <p className="mt-2 text-sm text-neutral-400">{period}</p>
+          <p className="mt-0.5 text-[11px] text-neutral-600">{timezone}</p>
+
+          <div className="mt-8 grid w-full max-w-md grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                {t("Avg. daily visitors")}
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
+                {overviewLoading ? (
+                  "—"
+                ) : (
+                  <NumberFlow
+                    value={Math.round(avgDailyVisitors)}
+                    format={{ notation: avgDailyVisitors >= 1000 ? "compact" : "standard" }}
+                  />
+                )}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-5 py-5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                {t("Avg. daily revenue")}
+              </p>
+              <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-emerald-400">
+                {!REVENUE_ATTRIBUTION || revenueLoading ? "—" : formatMoneyPrecise(avgDailyRevenue)}
+              </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </section>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label={t("Visitors")}
-          loading={overviewLoading}
-          value={<NumberFlow value={visitors} format={{ notation: "compact" }} />}
-        />
-        <StatCard
-          label={t("Sessions")}
-          loading={overviewLoading}
-          value={<NumberFlow value={sessions} format={{ notation: "compact" }} />}
-        />
-        <StatCard
-          label={t("Revenue")}
-          loading={revenueLoading}
-          accent
-          value={REVENUE_ATTRIBUTION ? formatMoney(revenueCents) : "—"}
-        />
-        <StatCard
-          label={t("Rev / visitor")}
-          loading={revenueLoading || overviewLoading}
-          accent
-          value={REVENUE_ATTRIBUTION ? formatMoneyPrecise(revPerVisitor) : "—"}
-        />
+        {/* KPI grid */}
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatPill
+            label={t("Visitors")}
+            loading={overviewLoading}
+            value={<NumberFlow value={visitors} format={{ notation: "compact" }} />}
+          />
+          <StatPill
+            label={t("Sessions")}
+            loading={overviewLoading}
+            value={<NumberFlow value={sessions} format={{ notation: "compact" }} />}
+          />
+          <StatPill
+            label={t("Revenue")}
+            loading={revenueLoading}
+            accent
+            value={REVENUE_ATTRIBUTION ? formatMoney(revenueCents) : "—"}
+          />
+          <StatPill
+            label={t("Rev / visitor")}
+            loading={revenueLoading || overviewLoading}
+            accent
+            value={REVENUE_ATTRIBUTION ? formatMoneyPrecise(revPerVisitor) : "—"}
+          />
+          <StatPill
+            label={t("Conversion rate")}
+            loading={revenueLoading || overviewLoading}
+            value={REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
+          />
+          <StatPill
+            label={t("Paying visitors")}
+            loading={revenueLoading}
+            value={REVENUE_ATTRIBUTION ? payingUsers.toLocaleString() : "—"}
+          />
+          <StatPill label={t("Bounce rate")} loading={overviewLoading} value={`${Math.round(bounce)}%`} />
+          <StatPill
+            label={t("Avg. session")}
+            loading={overviewLoading}
+            value={durationSec ? `${Math.round(durationSec / 60)}m ${Math.round(durationSec % 60)}s` : "—"}
+          />
+        </section>
+
+        {/* Audience composition */}
+        <section className="grid gap-3 md:grid-cols-3">
+          <AudienceCard
+            title={t("Top device")}
+            icon={topDevice ? <DeviceIcon deviceType={topDevice.value} size={28} /> : null}
+            name={topDevice?.value || t("Unknown")}
+            pct={topDevice ? round(topDevice.percentage) : null}
+            suffix={t("of sessions")}
+          />
+          <AudienceCard
+            title={t("Top browser")}
+            icon={topBrowser ? <Browser browser={topBrowser.value} size={28} /> : null}
+            name={topBrowser?.value || t("Unknown")}
+            pct={topBrowser ? round(topBrowser.percentage) : null}
+            suffix={t("of sessions")}
+          />
+          <AudienceCard
+            title={t("Top OS")}
+            icon={topOs ? <OperatingSystem os={topOs.value} size={28} /> : null}
+            name={topOs?.value || t("Unknown")}
+            pct={topOs ? round(topOs.percentage) : null}
+            suffix={t("of sessions")}
+          />
+        </section>
+
+        {/* Breakdowns */}
+        <section className="grid gap-3 lg:grid-cols-2">
+          <RankBlock
+            title={t("Top revenue by country")}
+            loading={revCountriesLoading}
+            empty={t("No revenue in this period")}
+            rows={countryRows}
+          />
+          <RankBlock
+            title={t("Top revenue by channel")}
+            loading={revChannelsLoading}
+            empty={t("No revenue in this period")}
+            rows={channelRows}
+          />
+          <RankBlock
+            title={t("Top revenue by referrer")}
+            loading={revReferrersLoading}
+            empty={t("No revenue in this period")}
+            rows={referrerRows}
+          />
+          <RankBlock title={t("Top pages")} loading={false} empty={t("No pageviews yet")} rows={pageRows} />
+        </section>
+
+        {REVENUE_ATTRIBUTION && paymentCount > 0 && (
+          <p className="text-center text-xs text-neutral-600">
+            {paymentCount.toLocaleString()} {t("successful payments")} · {payingUsers.toLocaleString()}{" "}
+            {t("paying visitors")} · {t("conversion")} {conversionRate.toFixed(2)}%
+          </p>
+        )}
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label={t("Conversion rate")}
-          loading={revenueLoading || overviewLoading}
-          value={REVENUE_ATTRIBUTION ? `${conversionRate.toFixed(2)}%` : "—"}
-        />
-        <StatCard
-          label={t("Paying visitors")}
-          loading={revenueLoading}
-          value={REVENUE_ATTRIBUTION ? payingUsers.toLocaleString() : "—"}
-        />
-        <StatCard
-          label={t("Bounce rate")}
-          loading={overviewLoading}
-          value={`${Math.round(bounce)}%`}
-        />
-        <StatCard
-          label={t("Avg. session")}
-          loading={overviewLoading}
-          value={durationSec ? `${Math.round(durationSec / 60)}m ${Math.round(durationSec % 60)}s` : "—"}
-        />
-      </div>
-
-      {/* Audience composition */}
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card className="border-neutral-800/80 bg-neutral-900/40">
-          <CardContent className="p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">
-              {t("Top device")}
+function AudienceCard({
+  title,
+  icon,
+  name,
+  pct,
+  suffix,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  name: string;
+  pct: number | null;
+  suffix: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 mb-3">{title}</p>
+      {pct != null ? (
+        <div className="flex items-center gap-3">
+          {icon}
+          <div>
+            <p className="font-semibold text-neutral-100">{name}</p>
+            <p className="text-xs text-neutral-500">
+              {pct}% {suffix}
             </p>
-            {topDevice ? (
-              <div className="flex items-center gap-3">
-                <DeviceIcon deviceType={topDevice.value} size={28} />
-                <div>
-                  <p className="font-semibold">{topDevice.value || t("Unknown")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {round(topDevice.percentage)}% {t("of sessions")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-neutral-800/80 bg-neutral-900/40">
-          <CardContent className="p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">
-              {t("Top browser")}
-            </p>
-            {topBrowser ? (
-              <div className="flex items-center gap-3">
-                <Browser browser={topBrowser.value} size={28} />
-                <div>
-                  <p className="font-semibold">{topBrowser.value || t("Unknown")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {round(topBrowser.percentage)}% {t("of sessions")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="border-neutral-800/80 bg-neutral-900/40">
-          <CardContent className="p-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">
-              {t("Top OS")}
-            </p>
-            {topOs ? (
-              <div className="flex items-center gap-3">
-                <OperatingSystem os={topOs.value} size={28} />
-                <div>
-                  <p className="font-semibold">{topOs.value || t("Unknown")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {round(topOs.percentage)}% {t("of sessions")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Revenue breakdowns + pages */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <RankList
-          title={t("Top revenue by country")}
-          loading={revCountriesLoading}
-          empty={t("No revenue in this period")}
-          rows={countryRows}
-        />
-        <RankList
-          title={t("Top revenue by channel")}
-          loading={revChannelsLoading}
-          empty={t("No revenue in this period")}
-          rows={channelRows}
-        />
-        <RankList
-          title={t("Top revenue by referrer")}
-          loading={revReferrersLoading}
-          empty={t("No revenue in this period")}
-          rows={referrerRows}
-        />
-        <RankList
-          title={t("Top pages")}
-          loading={false}
-          empty={t("No pageviews yet")}
-          rows={pageRows}
-        />
-      </div>
-
-      {REVENUE_ATTRIBUTION && paymentCount > 0 && (
-        <p className="text-center text-xs text-muted-foreground">
-          {paymentCount.toLocaleString()} {t("successful payments")} · {payingUsers.toLocaleString()}{" "}
-          {t("paying visitors")} · {t("conversion")} {conversionRate.toFixed(2)}%
-        </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-neutral-500">—</p>
       )}
     </div>
   );
